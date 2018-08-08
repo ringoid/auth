@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Auth Service
+
+
+Mappings:
+  LogMap:
+    PapertrailLog:
+      stage: "logs7.papertrailapp.com:23213"
+
+Parameters:
+  Env:
+    Type: String
+    Default: stage
+    AllowedValues:
+      - stage
+      - prod
+    Description: Env name
+
+Globals:
+    Function:
+        Timeout: 300
+        MemorySize: 512
+        Runtime: go1.x
+
+Resources:
+
+  StartAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Join [ "-", [ !Ref Env, start-auth] ]
+      Handler: start
+      CodeUri: ./start-auth.zip
+      Description: Start auth function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - SecretsManagerReadWrite
+      Environment:
+        Variables:
+          ENV: !Ref Env
+          PAPERTRAIL_LOG_ADDRESS: !FindInMap [LogMap, PapertrailLog, !Ref Env]
+          TMP_TOKEN_TABLE: !Ref TmpTokens
+      Events:
+        HelloEvent:
+          Type: Api
+          Properties:
+            Path: /start
+            Method: post
+      Tags:
+        Company: Ringoid
+        Service: auth
+        Environment: !Ref Env
+
+  CompleteAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Join [ "-", [ !Ref Env, complete-auth] ]
+      Handler: complete
+      CodeUri: ./complete-auth.zip
+      Description: Complete auth function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - SecretsManagerReadWrite
+      Environment:
+        Variables:
+          ENV: !Ref Env
+          PAPERTRAIL_LOG_ADDRESS: !FindInMap [LogMap, PapertrailLog, !Ref Env]
+      Events:
+        HelloEvent:
+          Type: Api
+          Properties:
+            Path: /complete
+            Method: get
+      Tags:
+        Company: Ringoid
+        Service: auth
+        Environment: !Ref Env
+
+  TmpTokens:
+    Type: AWS::DynamoDB::Table
+    Properties:
+          TableName: !Join [ "-", [ !Ref Env, tmp-tokens] ]
+          AttributeDefinitions:
+            -
+              AttributeName: token
+              AttributeType: S
+          KeySchema:
+            -
+              AttributeName: token
+              KeyType: HASH
+
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+
+          TimeToLiveSpecification:
+            AttributeName: ttl
+            Enabled: true
+
+          Tags:
+            - Key: Company
+              Value: Ringoid
+            - Key: Service
+              Value: auth
+            - Key: Environment
+              Value: !Ref Env
+
+Outputs:
+
+  StartAuthApi:
+    Description: "API Gateway endpoint URL for Prod stage for start-auth function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/start"
+
+  StartAuthFunction:
+      Description: "start-auth lambda function ARN"
+      Value: !GetAtt StartAuthFunction.Arn
+
+  CompleteAuthApi:
+    Description: "API Gateway endpoint URL for Prod stage for complete-auth function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/complete"
+
+  CompleteAuthFunction:
+      Description: "complete-auth lambda function ARN"
+      Value: !GetAtt CompleteAuthFunction.Arn
