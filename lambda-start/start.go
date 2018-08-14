@@ -32,12 +32,6 @@ const (
 
 	twilioApiKeyName    = "twilio-api-key"
 	twilioSecretKeyBase = "%s/Twilio/Api/Key"
-
-	//countryCodeParamName = "country_code"
-	//phoneNumberParamName = "phone"
-	//deviceTypeParamName  = "device"
-	//osParamName          = "os"
-	//screenParamName      = "screen"
 )
 
 func init() {
@@ -114,14 +108,6 @@ func init() {
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	anlogger.Infof("start.go : handle request %v", request)
 
-	//var paramMap map[string]interface{}
-	//decoder := json.NewDecoder(strings.NewReader(request.Body))
-	//err := decoder.Decode(&paramMap)
-	//if err != nil {
-	//	anlogger.Errorf("start.go : error decode params : %v", err)
-	//	return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.WrongRequestParamsClientError}, nil
-	//}
-
 	reqParam, ok := parseParams(request.Body)
 	if !ok {
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.WrongRequestParamsClientError}, nil
@@ -131,7 +117,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	sendAnalyticEvent(reqParam, sourceIp)
 
 	resp := apimodel.AuthResp{}
-	ok, resp.AccessToken = accessToken(reqParam.CountryCode, reqParam.Phone)
+	ok, resp.SessionId = accessToken(reqParam.CountryCode, reqParam.Phone)
 	if !ok {
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
@@ -165,68 +151,6 @@ func parseParams(params string) (*apimodel.StartReq, bool) {
 	}
 
 	return &req, true
-
-	////check country_code param, should be int
-	//if countryCode, ok := params[countryCodeParamName]; !ok {
-	//	anlogger.Errorf("start.go : check required parameter failed, %s is absent", countryCodeParamName)
-	//	return false
-	//} else {
-	//	if _, ok := countryCode.(float64); !ok {
-	//		anlogger.Errorf("start.go : check required parameter failed, %s is not int but %v",
-	//			countryCodeParamName, reflect.TypeOf(countryCode))
-	//		return false
-	//	}
-	//}
-	//
-	////check phone param, should be string
-	//if phone, ok := params[phoneNumberParamName]; !ok {
-	//	anlogger.Errorf("start.go : check required parameter failed, %s is absent", phoneNumberParamName)
-	//	return false
-	//} else {
-	//	if _, ok := phone.(string); !ok {
-	//		anlogger.Errorf("start.go : check required parameter failed, %s is not string but %v",
-	//			phoneNumberParamName, reflect.TypeOf(phone))
-	//		return false
-	//	}
-	//}
-	//
-	////check device type param, should be string
-	//if device, ok := params[deviceTypeParamName]; !ok {
-	//	anlogger.Errorf("start.go : check required parameter failed, %s is absent", deviceTypeParamName)
-	//	return false
-	//} else {
-	//	if _, ok := device.(string); !ok {
-	//		anlogger.Errorf("start.go : check required parameter failed, %s is not string but %v",
-	//			deviceTypeParamName, reflect.TypeOf(device))
-	//		return false
-	//	}
-	//}
-	//
-	////check os param, should be string
-	//if os, ok := params[osParamName]; !ok {
-	//	anlogger.Errorf("start.go : check required parameter failed, %s is absent", osParamName)
-	//	return false
-	//} else {
-	//	if _, ok := os.(string); !ok {
-	//		anlogger.Errorf("start.go : check required parameter failed, %s is not string but %v",
-	//			osParamName, reflect.TypeOf(os))
-	//		return false
-	//	}
-	//}
-	//
-	////check screen param, should be string
-	//if screen, ok := params[screenParamName]; !ok {
-	//	anlogger.Errorf("start.go : check required parameter failed, %s is absent", screenParamName)
-	//	return false
-	//} else {
-	//	if _, ok := screen.(string); !ok {
-	//		anlogger.Errorf("start.go : check required parameter failed, %s is not string but %v",
-	//			screenParamName, reflect.TypeOf(screen))
-	//		return false
-	//	}
-	//}
-	//
-	//return true
 }
 
 func accessToken(code int, number string) (bool, string) {

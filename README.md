@@ -27,7 +27,7 @@ Body:
     {
         "errorCode":"",
         "errorMessage":"",
-        "accessToken":"sdfsdf-fsdf-fsd"
+        "sessionId":"sdfsdf-fsdf-fsd"
     }
     
 Possible errorCodes:
