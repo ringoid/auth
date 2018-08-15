@@ -1,4 +1,4 @@
-all: clean deploy
+all: clean stage-deploy
 
 build:
 	@echo '--- Building start-auth function ---'
@@ -12,7 +12,7 @@ zip_lambda: build
 	@echo '--- Zip complete-auth function ---'
 	zip complete-auth.zip ./complete
 
-deploy: zip_lambda
+stage-deploy: zip_lambda
 	@echo '--- Build lambda stage ---'
 	@echo 'Package template'
 	sam package --template-file auth-template.yaml --s3-bucket ringoid-cloudformation-templates --output-template-file auth-template-packaged.yaml

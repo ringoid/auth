@@ -35,11 +35,16 @@ Resources:
       Policies:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
+        - AmazonKinesisFirehoseFullAccess
       Environment:
         Variables:
           ENV: !Ref Env
           PAPERTRAIL_LOG_ADDRESS: !FindInMap [LogMap, PapertrailLog, !Ref Env]
           TMP_TOKEN_TABLE: !Ref TmpTokens
+          DELIVERY_STREAM:
+            Fn::ImportValue:
+              !Join [ "-", [ !Ref Env, DeliveryStreamExportName] ]
+
       Events:
         HelloEvent:
           Type: Api
