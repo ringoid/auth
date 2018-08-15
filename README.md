@@ -35,3 +35,19 @@ Possible errorCodes:
 * InternalServerError
 * WrongRequestParamsClientError
 * PhoneNumberClientError
+
+
+## Analytics Events
+
+1. USER_ACCEPT_TERMS
+
+* countryCode - int
+* phone - string
+* device - string
+* os - string
+* screen - string
+* sourceIp - string
+* unixTime - int
+* eventType - string (USER_ACCEPT_TERMS)
+
+`{"countryCode":7,"phone":"9211112233","device":"iPhone X","os":"iOS","screen":"hd","sourceIp":"82.102.27.75","unixTime":1534338646,"eventType":"USER_ACCEPT_TERMS"}`
