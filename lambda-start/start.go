@@ -131,12 +131,12 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	sendAnalyticEvent(event)
 
 	resp := apimodel.AuthResp{}
-	ok, resp.SessionId = accessToken(reqParam.CountryCode, reqParam.Phone)
+	ok, resp.SessionId = accessToken(reqParam.CountryCallingCode, reqParam.Phone)
 	if !ok {
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
 
-	ok, errorStr := startVerify(reqParam.CountryCode, reqParam.Phone)
+	ok, errorStr := startVerify(reqParam.CountryCallingCode, reqParam.Phone, reqParam.Locale)
 	if !ok {
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
 	}
@@ -159,7 +159,7 @@ func parseParams(params string) (*apimodel.StartReq, bool) {
 		return nil, false
 	}
 
-	if req.CountryCode == 0 || req.Phone == "" || req.Device == "" || req.Os == "" || req.Screen == "" {
+	if req.CountryCallingCode == 0 || req.Phone == "" || req.Device == "" || req.Os == "" || req.Screen == "" {
 		anlogger.Errorf("start.go : one of the required param is nil, req %v", req)
 		return nil, false
 	}
@@ -220,8 +220,11 @@ func sendAnalyticEvent(event interface{}) {
 	}
 }
 
-func startVerify(code int, number string) (bool, string) {
+func startVerify(code int, number, locale string) (bool, string) {
 	params := fmt.Sprintf("via=sms&&phone_number=%s&&country_code=%d", number, code)
+	if len(locale) != 0 {
+		params = fmt.Sprintf("via=sms&&phone_number=%s&&country_code=%d&&locale=%s", number, code, locale)
+	}
 	req, err := http.NewRequest("POST",
 		"https://api.authy.com/protected/json/phones/verification/start",
 		strings.NewReader(params))
@@ -242,15 +245,34 @@ func startVerify(code int, number string) (bool, string) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		anlogger.Errorf("start.go : error reading response body from Twilio : %v", err)
+		return false, apimodel.InternalServerError
+	}
 
 	if resp.StatusCode != 200 {
 		anlogger.Errorf("start.go : error while sending sms, status %v, body %v",
 			resp.StatusCode, string(body))
-		//The only reason - wrong phone number
-		if resp.StatusCode == 400 {
-			return false, apimodel.PhoneNumberClientError
+
+		var errorResp map[string]interface{}
+		err := json.Unmarshal(body, &errorResp)
+		if err != nil {
+			anlogger.Errorf("start.go : error parsing Twilio response : %v", err)
+			return false, apimodel.InternalServerError
 		}
+
+		if errorCodeObject, ok := errorResp["error_code"]; ok {
+			if errorCodeStr, ok := errorCodeObject.(string); ok {
+				switch errorCodeStr {
+				case "60033":
+					return false, apimodel.PhoneNumberClientError
+				case "60078":
+					return false, apimodel.CountryCallingCodeClientError
+				}
+			}
+		}
+
 		return false, apimodel.InternalServerError
 	}
 

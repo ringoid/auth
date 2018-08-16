@@ -13,14 +13,17 @@ Headers:
 Body:
 
     {
-        "countryCode":7,
+        "countryCallingCode":7,
         "phone":"9211234567",
         "device":"iPhone X",
         "os":"iOS",
-        "screen":"bla-bla"
+        "screen":"bla-bla",
+        "locale":"en"
     }`
     
-    all parameters are required 
+    all parameters are required except locale
+    
+ Locale values could be found [here](https://www.twilio.com/docs/verify/supported-languages)
     
  Response Body:
  
@@ -35,13 +38,14 @@ Possible errorCodes:
 * InternalServerError
 * WrongRequestParamsClientError
 * PhoneNumberClientError
+* CountryCallingCodeClientError
 
 
 ## Analytics Events
 
 1. USER_ACCEPT_TERMS
 
-* countryCode - int
+* countryCallingCode - int
 * phone - string
 * device - string
 * os - string
@@ -49,5 +53,6 @@ Possible errorCodes:
 * sourceIp - string
 * unixTime - int
 * eventType - string (USER_ACCEPT_TERMS)
+* locale - string (if present)
 
-`{"countryCode":7,"phone":"9211112233","device":"iPhone X","os":"iOS","screen":"hd","sourceIp":"82.102.27.75","unixTime":1534338646,"eventType":"USER_ACCEPT_TERMS"}`
+`{"countryCallingCode":7,"phone":"9211112233","device":"iPhone X","os":"iOS","screen":"hd","sourceIp":"82.102.27.75","unixTime":1534338646,"eventType":"USER_ACCEPT_TERMS"}`
