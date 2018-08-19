@@ -45,14 +45,13 @@ Possible errorCodes:
 
 1. USER_ACCEPT_TERMS
 
-* countryCallingCode - int
-* phone - string
+* userId - string
 * device - string
 * os - string
 * screen - string
 * sourceIp - string
 * unixTime - int
 * eventType - string (USER_ACCEPT_TERMS)
-* locale - string (if present)
+* locale - string
 
-`{"countryCallingCode":7,"phone":"9211112233","device":"iPhone X","os":"iOS","screen":"hd","sourceIp":"82.102.27.75","unixTime":1534338646,"eventType":"USER_ACCEPT_TERMS"}`
+`{"userId":"aslkdl-asfmfa-asd","device":"iPhone X","os":"iOS","screen":"hd","sourceIp":"82.102.27.75","unixTime":1534338646,"locale":"","eventType":"USER_ACCEPT_TERMS"}`

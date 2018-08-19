@@ -7,6 +7,24 @@ Mappings:
   LogMap:
     PapertrailLog:
       stage: "logs7.papertrailapp.com:23213"
+      prod: "should-be-prod-papertril-endpoint"
+
+  UserTableCUMap:
+    stage:
+      wcumax: 1
+      wcucrt: 1
+      wcumin: 1
+      rcumax: 1
+      rcucrt: 1
+      rcumin: 1
+    prod:
+      wcumax: should-be-prod-value
+      wcucrt: should-be-prod-value
+      wcumin: should-be-prod-value
+      rcumax: should-be-prod-value
+      rcucrt: should-be-prod-value
+      rcumin: should-be-prod-value
+
 
 Parameters:
   Env:
@@ -25,6 +43,38 @@ Globals:
 
 Resources:
 
+  ScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - "application-autoscaling.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        -
+          PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - "dynamodb:DescribeTable"
+                  - "dynamodb:UpdateTable"
+                  - "cloudwatch:PutMetricAlarm"
+                  - "cloudwatch:DescribeAlarms"
+                  - "cloudwatch:GetMetricStatistics"
+                  - "cloudwatch:SetAlarmState"
+                  - "cloudwatch:DeleteAlarms"
+                Resource: "*"
+
   StartAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -40,7 +90,7 @@ Resources:
         Variables:
           ENV: !Ref Env
           PAPERTRAIL_LOG_ADDRESS: !FindInMap [LogMap, PapertrailLog, !Ref Env]
-          TMP_TOKEN_TABLE: !Ref TmpTokens
+          USER_TABLE: !Ref UserTable
           DELIVERY_STREAM:
             Fn::ImportValue:
               !Join [ "-", [ !Ref Env, DeliveryStreamExportName] ]
@@ -81,27 +131,52 @@ Resources:
         Service: auth
         Environment: !Ref Env
 
-  TmpTokens:
+  UserTable:
     Type: AWS::DynamoDB::Table
     Properties:
-          TableName: !Join [ "-", [ !Ref Env, tmp-tokens] ]
+          TableName: !Join [ "-", [ !Ref Env, Auth, UserTable] ]
           AttributeDefinitions:
             -
-              AttributeName: token
+              AttributeName: phone
+              AttributeType: S
+            -
+              AttributeName: user_id
+              AttributeType: S
+            -
+              AttributeName: session_id
               AttributeType: S
           KeySchema:
             -
-              AttributeName: token
+              AttributeName: phone
               KeyType: HASH
 
           ProvisionedThroughput:
-            ReadCapacityUnits: 1
-            WriteCapacityUnits: 1
+            ReadCapacityUnits: !FindInMap [UserTableCUMap, !Ref Env, rcucrt]
+            WriteCapacityUnits: !FindInMap [UserTableCUMap, !Ref Env, wcucrt]
 
-          TimeToLiveSpecification:
-            AttributeName: ttl
-            Enabled: true
-
+          GlobalSecondaryIndexes:
+            -
+              IndexName: userIdGSI
+              KeySchema:
+                -
+                  AttributeName: user_id
+                  KeyType: HASH
+              Projection:
+                ProjectionType: ALL
+              ProvisionedThroughput:
+                ReadCapacityUnits: !FindInMap [UserTableCUMap, !Ref Env, rcucrt]
+                WriteCapacityUnits: !FindInMap [UserTableCUMap, !Ref Env, wcucrt]
+            -
+              IndexName: sessionGSI
+              KeySchema:
+                -
+                  AttributeName: session_id
+                  KeyType: HASH
+              Projection:
+                ProjectionType: ALL
+              ProvisionedThroughput:
+                ReadCapacityUnits: !FindInMap [UserTableCUMap, !Ref Env, rcucrt]
+                WriteCapacityUnits: !FindInMap [UserTableCUMap, !Ref Env, wcucrt]
           Tags:
             - Key: Company
               Value: Ringoid
@@ -109,6 +184,200 @@ Resources:
               Value: auth
             - Key: Environment
               Value: !Ref Env
+
+  UserTableWriteCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: UserTable
+    Properties:
+      MaxCapacity: !FindInMap [UserTableCUMap, !Ref Env, wcumax]
+      MinCapacity: !FindInMap [UserTableCUMap, !Ref Env, wcumin]
+      ResourceId: !Join
+        - /
+        - - table
+          - !Join [ "-", [ !Ref Env, Auth, UserTable] ]
+      RoleARN: !GetAtt
+        - ScalingRole
+        - Arn
+      ScalableDimension: "dynamodb:table:WriteCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  UserTableReadCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: UserTable
+    Properties:
+      MaxCapacity: !FindInMap [UserTableCUMap, !Ref Env, rcumax]
+      MinCapacity: !FindInMap [UserTableCUMap, !Ref Env, rcumin]
+      ResourceId: !Join
+        - /
+        - - table
+          - !Join [ "-", [ !Ref Env, Auth, UserTable] ]
+      RoleARN: !GetAtt
+        - ScalingRole
+        - Arn
+      ScalableDimension: "dynamodb:table:ReadCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  UserTableWriteScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: UserTable
+    Properties:
+      PolicyName: WriteAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: UserTableWriteCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+
+  UserTableReadScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: UserTable
+    Properties:
+      PolicyName: ReadAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: UserTableReadCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
+
+  UserTableUserIdGSIWriteCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: UserTable
+    Properties:
+      MaxCapacity: !FindInMap [UserTableCUMap, !Ref Env, wcumax]
+      MinCapacity: !FindInMap [UserTableCUMap, !Ref Env, wcumin]
+      ResourceId: !Join
+        - /
+        - - table
+          - !Join [ "-", [ !Ref Env, Auth, UserTable] ]
+          - index
+          - userIdGSI
+      RoleARN: !GetAtt
+        - ScalingRole
+        - Arn
+      ScalableDimension: "dynamodb:index:WriteCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  UserTableUserIdGSIReadCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: UserTable
+    Properties:
+      MaxCapacity: !FindInMap [UserTableCUMap, !Ref Env, rcumax]
+      MinCapacity: !FindInMap [UserTableCUMap, !Ref Env, rcumin]
+      ResourceId: !Join
+        - /
+        - - table
+          - !Join [ "-", [ !Ref Env, Auth, UserTable] ]
+          - index
+          - userIdGSI
+      RoleARN: !GetAtt
+        - ScalingRole
+        - Arn
+      ScalableDimension: "dynamodb:index:ReadCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  UserTableUserIdGSIWriteScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: UserTable
+    Properties:
+      PolicyName: WriteAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: UserTableUserIdGSIWriteCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+
+  UserTableUserIdGSIReadScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: UserTable
+    Properties:
+      PolicyName: ReadAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: UserTableUserIdGSIReadCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
+
+  UserTableSessionGSIWriteCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: UserTable
+    Properties:
+      MaxCapacity: !FindInMap [UserTableCUMap, !Ref Env, wcumax]
+      MinCapacity: !FindInMap [UserTableCUMap, !Ref Env, wcumin]
+      ResourceId: !Join
+        - /
+        - - table
+          - !Join [ "-", [ !Ref Env, Auth, UserTable] ]
+          - index
+          - sessionGSI
+      RoleARN: !GetAtt
+        - ScalingRole
+        - Arn
+      ScalableDimension: "dynamodb:index:WriteCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  UserTableSessionGSIReadCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: UserTable
+    Properties:
+      MaxCapacity: !FindInMap [UserTableCUMap, !Ref Env, rcumax]
+      MinCapacity: !FindInMap [UserTableCUMap, !Ref Env, rcumin]
+      ResourceId: !Join
+        - /
+        - - table
+          - !Join [ "-", [ !Ref Env, Auth, UserTable] ]
+          - index
+          - sessionGSI
+      RoleARN: !GetAtt
+        - ScalingRole
+        - Arn
+      ScalableDimension: "dynamodb:index:ReadCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  UserTableSessionGSIWriteScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: UserTable
+    Properties:
+      PolicyName: WriteAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: UserTableSessionGSIWriteCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+
+  UserTableSessionGSIReadScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: UserTable
+    Properties:
+      PolicyName: ReadAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: UserTableSessionGSIReadCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
 
 Outputs:
 

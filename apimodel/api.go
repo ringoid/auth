@@ -1,17 +1,18 @@
 package apimodel
 
-type AuthResp struct {
-	ErrorCode    string `json:"errorCode"`
-	ErrorMessage string `json:"errorMessage"`
-	SessionId    string `json:"sessionId"`
-}
-
 const (
 	InternalServerError           = `{"errorCode":"InternalServerError","errorMessage":"Internal Server Error"}`
 	WrongRequestParamsClientError = `{"errorCode":"WrongParamsClientError","errorMessage":"Wrong request params"}`
 	PhoneNumberClientError        = `{"errorCode":"PhoneNumberClientError","errorMessage":"Phone number is invalid"}`
 	CountryCallingCodeClientError = `{"errorCode":"CountryCallingCodeClientError","errorMessage":"Country code is invalid"}`
 )
+
+//Request - Response model
+type AuthResp struct {
+	ErrorCode    string `json:"errorCode"`
+	ErrorMessage string `json:"errorMessage"`
+	SessionId    string `json:"sessionId"`
+}
 
 type StartReq struct {
 	CountryCallingCode int    `json:"countryCallingCode"`

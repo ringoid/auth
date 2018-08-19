@@ -20,12 +20,13 @@ import (
 	"time"
 	"strconv"
 	"github.com/aws/aws-sdk-go/service/firehose"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 )
 
 var anlogger *syslog.Logger
 var twilioKey string
 var awsDbClient *dynamodb.DynamoDB
-var tmpTokenTableName string
+var userTableName string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 
@@ -35,6 +36,15 @@ const (
 
 	twilioApiKeyName    = "twilio-api-key"
 	twilioSecretKeyBase = "%s/Twilio/Api/Key"
+
+	sessionGSIName = "sessionGSI"
+
+	phoneColumnName     = "phone"
+	userIdColumnName    = "user_id"
+	sessionIdColumnName = "session_id"
+
+	countryCodeColumnName = "country_code"
+	timeColumnName        = "time"
 )
 
 func init() {
@@ -66,12 +76,12 @@ func init() {
 	}
 	anlogger.Infoln("start.go : logger was successfully initialized")
 
-	tmpTokenTableName, ok = os.LookupEnv("TMP_TOKEN_TABLE")
+	userTableName, ok = os.LookupEnv("USER_TABLE")
 	if !ok {
-		fmt.Printf("start.go : env can not be empty TMP_TOKEN_TABLE")
+		fmt.Printf("start.go : env can not be empty USER_TABLE")
 		os.Exit(1)
 	}
-	anlogger.Infof("start.go : start with TMP_TOKEN_TABLE = %s", tmpTokenTableName)
+	anlogger.Infof("start.go : start with USER_TABLE = %s", userTableName)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
 		WithRegion(region).WithMaxRetries(maxRetries).
@@ -118,7 +128,7 @@ func init() {
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	anlogger.Infof("start.go : handle request %v", request)
+	anlogger.Debugf("start.go : handle request %v", request)
 
 	reqParam, ok := parseParams(request.Body)
 	if !ok {
@@ -127,15 +137,47 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	sourceIp := request.RequestContext.Identity.SourceIP
 
-	event := apimodel.NewUserAcceptTermsEvent(*reqParam, sourceIp)
-	sendAnalyticEvent(event)
-
-	resp := apimodel.AuthResp{}
-	ok, resp.SessionId = accessToken(reqParam.CountryCallingCode, reqParam.Phone)
-	if !ok {
+	userId, err := uuid.NewV4()
+	if err != nil {
+		anlogger.Errorf("start.go : error while generate userId : %v", err)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
 
+	sessionId, err := uuid.NewV4()
+	if err != nil {
+		anlogger.Errorf("start.go : error while generate sessionId : %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
+	}
+	fullPhone := strconv.Itoa(reqParam.CountryCallingCode) + reqParam.Phone
+	userInfo := &apimodel.UserInfo{
+		UserId:      userId.String(),
+		SessionId:   sessionId.String(),
+		Phone:       fullPhone,
+		CountryCode: reqParam.CountryCallingCode,
+	}
+
+	resUserId, resSessionId, wasCreated, ok, errStr := createUserInfo(userInfo)
+	if !ok {
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+	}
+
+	resp := apimodel.AuthResp{}
+	if wasCreated {
+		anlogger.Debugf("start.go : new user was created with userId %s and sessionId %s", resUserId, resSessionId)
+		resp.SessionId = resSessionId
+		event := apimodel.NewUserAcceptTermsEvent(*reqParam, sourceIp, resUserId)
+		sendAnalyticEvent(event)
+	} else {
+		newSessionId, ok, errStr := updateSessionId(userInfo.Phone, userInfo.SessionId)
+		if !ok {
+			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		}
+		resp.SessionId = newSessionId
+		anlogger.Debugf("start.go : user with such phone %s already exist, new sessionId id was generated %s",
+			userInfo.Phone, resp.SessionId)
+	}
+
+	//send sms
 	ok, errorStr := startVerify(reqParam.CountryCallingCode, reqParam.Phone, reqParam.Locale)
 	if !ok {
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
@@ -146,8 +188,141 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		anlogger.Errorf("start.go : error while marshaling resp object : %v", err)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
-	//return OK with AccessToken
+	//return OK with SessionId
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
+}
+
+//return updated sessionId, is everything ok and error string
+func updateSessionId(phone, sessionId string) (string, bool, string) {
+	input :=
+		&dynamodb.UpdateItemInput{
+			ExpressionAttributeNames: map[string]*string{
+				"#sessionId": aws.String(sessionIdColumnName),
+			},
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":sV": {
+					S: aws.String(fmt.Sprint(sessionId)),
+				},
+			},
+			Key: map[string]*dynamodb.AttributeValue{
+				phoneColumnName: {
+					S: aws.String(phone),
+				},
+			},
+			TableName:        aws.String(userTableName),
+			UpdateExpression: aws.String("SET #sessionId = :sV"),
+			ReturnValues:     aws.String("ALL_NEW"),
+		}
+
+	res, err := awsDbClient.UpdateItem(input)
+	if err != nil {
+		anlogger.Errorf("start.go : error while update sessionId : %v", err)
+		return "", false, apimodel.InternalServerError
+	}
+
+	resSessionId := *res.Attributes[sessionIdColumnName].S
+	return resSessionId, true, ""
+}
+
+//return userId, sessionId, was user created, was everything ok and error string
+func createUserInfo(userInfo *apimodel.UserInfo) (string, string, bool, bool, string) {
+	input :=
+		&dynamodb.UpdateItemInput{
+			ExpressionAttributeNames: map[string]*string{
+				"#userId":    aws.String(userIdColumnName),
+				"#sessionId": aws.String(sessionIdColumnName),
+
+				"#countryCode": aws.String(countryCodeColumnName),
+				"#time":        aws.String(timeColumnName),
+			},
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":uV": {
+					S: aws.String(userInfo.UserId),
+				},
+				":sV": {
+					S: aws.String(fmt.Sprint(userInfo.SessionId)),
+				},
+
+				":cV": {
+					S: aws.String(strconv.Itoa(userInfo.CountryCode)),
+				},
+				":tV": {
+					S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
+				},
+			},
+			Key: map[string]*dynamodb.AttributeValue{
+				phoneColumnName: {
+					S: aws.String(userInfo.Phone),
+				},
+			},
+			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", userIdColumnName)),
+
+			TableName:        aws.String(userTableName),
+			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #time = :tV"),
+			ReturnValues:     aws.String("ALL_NEW"),
+		}
+
+	res, err := awsDbClient.UpdateItem(input)
+
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case dynamodb.ErrCodeConditionalCheckFailedException:
+				return "", "", false, true, ""
+			}
+		}
+		anlogger.Errorf("start.go : error while creating user : %v", err)
+		return "", "", false, false, apimodel.InternalServerError
+	}
+
+	resUserId := *res.Attributes[userIdColumnName].S
+	resSessionId := *res.Attributes[sessionIdColumnName].S
+	return resUserId, resSessionId, true, true, ""
+}
+
+//return userInfo, is everything ok and error string
+func fetchBySessionId(sessionId string) (*apimodel.UserInfo, bool, string) {
+	input := &dynamodb.QueryInput{
+		ExpressionAttributeNames: map[string]*string{
+			"#sessionId": aws.String(sessionIdColumnName),
+		},
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":sV": {
+				S: aws.String(sessionId),
+			},
+		},
+		KeyConditionExpression: aws.String("#sessionId = :sV"),
+		IndexName:              aws.String(sessionGSIName),
+		TableName:              aws.String(userTableName),
+	}
+
+	res, err := awsDbClient.Query(input)
+
+	if err != nil {
+		anlogger.Errorf("start.go : error while fetch userInfo by sessionId : %v", err)
+		return &apimodel.UserInfo{}, false, apimodel.InternalServerError
+	}
+
+	if len(res.Items) != 1 {
+		anlogger.Errorf("start.go : error several userInfo by one sessionId")
+		return &apimodel.UserInfo{}, false, apimodel.InternalServerError
+	}
+	userId := *res.Items[0][userIdColumnName].S
+	sessId := *res.Items[0][sessionIdColumnName].S
+	phone := *res.Items[0][phoneColumnName].S
+
+	countryCode, err := strconv.Atoi(*res.Items[0][countryCodeColumnName].S)
+	if err != nil {
+		anlogger.Errorf("start.go : error while parsing country code : %v", err)
+		return &apimodel.UserInfo{}, false, apimodel.InternalServerError
+	}
+
+	return &apimodel.UserInfo{
+		UserId:      userId,
+		SessionId:   sessId,
+		Phone:       phone,
+		CountryCode: countryCode,
+	}, true, ""
 }
 
 func parseParams(params string) (*apimodel.StartReq, bool) {
@@ -165,39 +340,6 @@ func parseParams(params string) (*apimodel.StartReq, bool) {
 	}
 
 	return &req, true
-}
-
-func accessToken(code int, number string) (bool, string) {
-	token, err := uuid.NewV4()
-	if err != nil {
-		anlogger.Errorf("start.go : error while generate uuid for token : %v", err)
-		return false, ""
-	}
-
-	input := &dynamodb.PutItemInput{
-		Item: map[string]*dynamodb.AttributeValue{
-			"token": {
-				S: aws.String(token.String()),
-			},
-			"code": {
-				N: aws.String(strconv.Itoa(code)),
-			},
-			"phone": {
-				S: aws.String(number),
-			},
-			"ttl": {
-				N: aws.String(strconv.FormatInt(time.Now().Add(5 * time.Minute).Unix(), 10)),
-			},
-		},
-		TableName: aws.String(tmpTokenTableName),
-	}
-
-	_, err = awsDbClient.PutItem(input)
-	if err != nil {
-		anlogger.Errorf("start.go : error while writing tmp token : %v", err)
-		return false, ""
-	}
-	return true, token.String()
 }
 
 func sendAnalyticEvent(event interface{}) {
