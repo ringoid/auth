@@ -25,6 +25,22 @@ Mappings:
       rcucrt: should-be-prod-value
       rcumin: should-be-prod-value
 
+  AccessTokenTableCUMap:
+    stage:
+      wcumax: 1
+      wcucrt: 1
+      wcumin: 1
+      rcumax: 1
+      rcucrt: 1
+      rcumin: 1
+    prod:
+      wcumax: should-be-prod-value
+      wcucrt: should-be-prod-value
+      wcumin: should-be-prod-value
+      rcumax: should-be-prod-value
+      rcucrt: should-be-prod-value
+      rcumin: should-be-prod-value
+
 
 Parameters:
   Env:
@@ -40,6 +56,18 @@ Globals:
         Timeout: 300
         MemorySize: 512
         Runtime: go1.x
+        Environment:
+          Variables:
+            ENV: !Ref Env
+            PAPERTRAIL_LOG_ADDRESS: !FindInMap [LogMap, PapertrailLog, !Ref Env]
+            USER_TABLE: !Ref UserTable
+            DELIVERY_STREAM:
+              Fn::ImportValue:
+                !Join [ "-", [ !Ref Env, DeliveryStreamExportName] ]
+        Tags:
+          Company: Ringoid
+          Service: auth
+          Environment: !Ref Env
 
 Resources:
 
@@ -86,25 +114,12 @@ Resources:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
         - AmazonKinesisFirehoseFullAccess
-      Environment:
-        Variables:
-          ENV: !Ref Env
-          PAPERTRAIL_LOG_ADDRESS: !FindInMap [LogMap, PapertrailLog, !Ref Env]
-          USER_TABLE: !Ref UserTable
-          DELIVERY_STREAM:
-            Fn::ImportValue:
-              !Join [ "-", [ !Ref Env, DeliveryStreamExportName] ]
-
       Events:
-        HelloEvent:
+        StartEvent:
           Type: Api
           Properties:
-            Path: /start
+            Path: /start_verification
             Method: post
-      Tags:
-        Company: Ringoid
-        Service: auth
-        Environment: !Ref Env
 
   CompleteAuthFunction:
     Type: AWS::Serverless::Function
@@ -116,20 +131,191 @@ Resources:
       Policies:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
+        - AmazonKinesisFirehoseFullAccess
       Environment:
         Variables:
-          ENV: !Ref Env
-          PAPERTRAIL_LOG_ADDRESS: !FindInMap [LogMap, PapertrailLog, !Ref Env]
+          ACCESS_TOKEN_TABLE: !Ref AccessTokenTable
+          NEO4J_URL:
+            Fn::ImportValue:
+              !Join [ "-", [ !Ref Env, Neo4jLoadBalancerUrlExport] ]
+
       Events:
-        HelloEvent:
+        CompleteEvent:
           Type: Api
           Properties:
-            Path: /complete
-            Method: get
-      Tags:
-        Company: Ringoid
-        Service: auth
-        Environment: !Ref Env
+            Path: /complete_verification
+            Method: post
+
+  AccessTokenTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+          TableName: !Join [ "-", [ !Ref Env, Auth, AccessTokenTable] ]
+          AttributeDefinitions:
+            -
+              AttributeName: user_id
+              AttributeType: S
+            -
+              AttributeName: access_token
+              AttributeType: S
+          KeySchema:
+            -
+              AttributeName: user_id
+              KeyType: HASH
+
+          ProvisionedThroughput:
+            ReadCapacityUnits: !FindInMap [AccessTokenTableCUMap, !Ref Env, rcucrt]
+            WriteCapacityUnits: !FindInMap [AccessTokenTableCUMap, !Ref Env, wcucrt]
+
+          GlobalSecondaryIndexes:
+            -
+              IndexName: accessTokenGSI
+              KeySchema:
+                -
+                  AttributeName: access_token
+                  KeyType: HASH
+              Projection:
+                ProjectionType: ALL
+              ProvisionedThroughput:
+                ReadCapacityUnits: !FindInMap [AccessTokenTableCUMap, !Ref Env, rcucrt]
+                WriteCapacityUnits: !FindInMap [AccessTokenTableCUMap, !Ref Env, wcucrt]
+
+          Tags:
+            - Key: Company
+              Value: Ringoid
+            - Key: Service
+              Value: auth
+            - Key: Environment
+              Value: !Ref Env
+
+  AccessTokenTableWriteCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: AccessTokenTable
+    Properties:
+      MaxCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, wcumax]
+      MinCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, wcumin]
+      ResourceId: !Join
+        - /
+        - - table
+          - !Join [ "-", [ !Ref Env, Auth, AccessTokenTable] ]
+      RoleARN: !GetAtt
+        - ScalingRole
+        - Arn
+      ScalableDimension: "dynamodb:table:WriteCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  AccessTokenTableReadCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: AccessTokenTable
+    Properties:
+      MaxCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, rcumax]
+      MinCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, rcumin]
+      ResourceId: !Join
+        - /
+        - - table
+          - !Join [ "-", [ !Ref Env, Auth, AccessTokenTable] ]
+      RoleARN: !GetAtt
+        - ScalingRole
+        - Arn
+      ScalableDimension: "dynamodb:table:ReadCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  AccessTokenTableWriteScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: AccessTokenTable
+    Properties:
+      PolicyName: WriteAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: AccessTokenTableWriteCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+
+  AccessTokenTableReadScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: AccessTokenTable
+    Properties:
+      PolicyName: ReadAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: AccessTokenTableReadCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
+
+  AccessTokenTableAccessTokenGSIWriteCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: AccessTokenTable
+    Properties:
+      MaxCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, wcumax]
+      MinCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, wcumin]
+      ResourceId: !Join
+        - /
+        - - table
+          - !Join [ "-", [ !Ref Env, Auth, AccessTokenTable] ]
+          - index
+          - accessTokenGSI
+      RoleARN: !GetAtt
+        - ScalingRole
+        - Arn
+      ScalableDimension: "dynamodb:index:WriteCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  AccessTokenTableAccessTokenGSIReadCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: AccessTokenTable
+    Properties:
+      MaxCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, rcumax]
+      MinCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, rcumin]
+      ResourceId: !Join
+        - /
+        - - table
+          - !Join [ "-", [ !Ref Env, Auth, AccessTokenTable] ]
+          - index
+          - accessTokenGSI
+      RoleARN: !GetAtt
+        - ScalingRole
+        - Arn
+      ScalableDimension: "dynamodb:index:ReadCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  AccessTokenTableAccessTokenGSIWriteScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: AccessTokenTable
+    Properties:
+      PolicyName: WriteAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: AccessTokenTableAccessTokenGSIWriteCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+
+  AccessTokenTableAccessTokenGSIReadScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: AccessTokenTable
+    Properties:
+      PolicyName: ReadAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: AccessTokenTableAccessTokenGSIReadCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
+
+
 
   UserTable:
     Type: AWS::DynamoDB::Table
@@ -383,7 +569,7 @@ Outputs:
 
   StartAuthApi:
     Description: "API Gateway endpoint URL for Prod stage for start-auth function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/start"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/start_verification"
 
   StartAuthFunction:
       Description: "start-auth lambda function ARN"
@@ -391,7 +577,7 @@ Outputs:
 
   CompleteAuthApi:
     Description: "API Gateway endpoint URL for Prod stage for complete-auth function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/complete"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/complete_verification"
 
   CompleteAuthFunction:
       Description: "complete-auth lambda function ARN"

@@ -1,8 +1,11 @@
 # auth service
 
+### STAGE API ENDPOINT IS ``lewwnhue55.execute-api.eu-west-1.amazonaws.com``
+### PROD API ENDPOINT IS ````
+
 ### Start auth
 
-* stage url ``https://oka5pmgpb3.execute-api.eu-west-2.amazonaws.com/Prod/start``
+* url ``https://{API ENDPOINT}/Prod/start_verification``
 
 POST request
 
@@ -15,11 +18,11 @@ Body:
     {
         "countryCallingCode":7,
         "phone":"9211234567",
-        "device":"iPhone X",
-        "os":"iOS",
-        "screen":"bla-bla",
+        "dtTC":"2018-08-01 12:34:54 UTC+3", //date and time when Terms and Conditions were accepted
+        "dtLA":"2018-08-01 12:34:55 UTC+3", //date and time when Privacy Notes were accepted
+        "dtPN":"2018-08-01 12:34:56 UTC+3", //date and time when Legal age was confirmed
         "locale":"en"
-    }`
+    }
     
     all parameters are required except locale
     
@@ -40,18 +43,58 @@ Possible errorCodes:
 * PhoneNumberClientError
 * CountryCallingCodeClientError
 
+### Complete auth
+
+* url ``https://{API ENDPOINT}/Prod/complete_verification``
+
+POST request
+
+Headers:
+
+* Content-Type : application/json
+
+Body:
+
+    {
+        "SessionId":"sdkjfhh-dfsdf-e333",
+        "VerificationCode":6121
+    }
+    
+    all parameters are required
+    
+ Response Body:
+ 
+    {
+        "accessToken":"aslkdjflkjh-sdfasdfsadf-dd",
+        "errorCode":"",
+        "errorMessage":""
+    }
+    
+Possible errorCodes:
+
+* InternalServerError
+* WrongSessionIdClientError
+* NoPendingVerificationClientError
 
 ## Analytics Events
 
-1. USER_ACCEPT_TERMS
+1. AUTH_USER_ACCEPT_TERMS
 
 * userId - string
-* device - string
-* os - string
-* screen - string
 * sourceIp - string
 * unixTime - int
-* eventType - string (USER_ACCEPT_TERMS)
+* eventType - string (AUTH_USER_ACCEPT_TERMS)
 * locale - string
+* dtTC - date and time when Terms and conditions were accepted
+* dtPN - date and time when Privacy Notes were accepted
+* dtLA - date and time when Legal age was confirmed
 
-`{"userId":"aslkdl-asfmfa-asd","device":"iPhone X","os":"iOS","screen":"hd","sourceIp":"82.102.27.75","unixTime":1534338646,"locale":"","eventType":"USER_ACCEPT_TERMS"}`
+`{"userId":"aslkdl-asfmfa-asd","sourceIp":"82.102.27.75","unixTime":1534338646,"dtTC":"2018-08-01 12:34:54 UTC+3","dtPN":"2018-08-01 12:34:54 UTC+3","dtLA":"2018-08-01 12:34:54 UTC+3",locale":"","eventType":"AUTH_USER_ACCEPT_TERMS"}`
+
+2. AUTH_USER_COMPLETE_VERIFICATION
+
+* userId - string
+* unixTime - int
+* eventType - string (AUTH_USER_COMPLETE_VERIFICATION)
+
+`{"userId":"aslkdl-asfmfa-asd","unixTime":1534338646,"eventType":"AUTH_USER_COMPLETE_VERIFICATION"}`

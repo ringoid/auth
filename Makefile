@@ -15,9 +15,9 @@ zip_lambda: build
 stage-deploy: zip_lambda
 	@echo '--- Build lambda stage ---'
 	@echo 'Package template'
-	sam package --template-file auth-template.yaml --s3-bucket ringoid-cloudformation-templates --output-template-file auth-template-packaged.yaml
+	sam package --template-file auth-template.yaml --s3-bucket ringoid-cloudformation-template --output-template-file auth-template-packaged.yaml
 	@echo 'Deploy stage-auth-stack'
-	sam deploy --template-file auth-template-packaged.yaml --s3-bucket ringoid-cloudformation-templates --stack-name stage-auth-stack --capabilities CAPABILITY_IAM --parameter-overrides Env=stage --no-fail-on-empty-changeset
+	sam deploy --template-file auth-template-packaged.yaml --s3-bucket ringoid-cloudformation-template --stack-name stage-auth-stack --capabilities CAPABILITY_IAM --parameter-overrides Env=stage --no-fail-on-empty-changeset
 
 clean:
 	@echo '--- Delete old artifacts ---'

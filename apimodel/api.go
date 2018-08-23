@@ -5,20 +5,39 @@ const (
 	WrongRequestParamsClientError = `{"errorCode":"WrongParamsClientError","errorMessage":"Wrong request params"}`
 	PhoneNumberClientError        = `{"errorCode":"PhoneNumberClientError","errorMessage":"Phone number is invalid"}`
 	CountryCallingCodeClientError = `{"errorCode":"CountryCallingCodeClientError","errorMessage":"Country code is invalid"}`
+
+	WrongSessionIdClientError        = `{"errorCode":"WrongSessionIdClientError","errorMessage":"Session id is invalid"}`
+	NoPendingVerificationClientError = `{"errorCode":"NoPendingVerificationClientError","errorMessage":"No pending verifications found"}`
+	WrongVerificationCodeClientError = `{"errorCode":"WrongVerificationCodeClientError","errorMessage":"Wrong verification code"}`
 )
+
+type BaseResponse struct {
+	ErrorCode    string `json:"errorCode"`
+	ErrorMessage string `json:"errorMessage"`
+}
 
 //Request - Response model
 type AuthResp struct {
-	ErrorCode    string `json:"errorCode"`
-	ErrorMessage string `json:"errorMessage"`
-	SessionId    string `json:"sessionId"`
+	BaseResponse
+	SessionId string `json:"sessionId"`
 }
 
 type StartReq struct {
-	CountryCallingCode int    `json:"countryCallingCode"`
-	Phone              string `json:"phone"`
-	Device             string `json:"device"`
-	Os                 string `json:"os"`
-	Screen             string `json:"screen"`
-	Locale             string `json:"locale"`
+	CountryCallingCode         int    `json:"countryCallingCode"`
+	Phone                      string `json:"phone"`
+	Locale                     string `json:"locale"`
+	DateTimeTermsAndConditions string `json:"dtTC"`
+	DateTimePrivacyNotes       string `json:"dtPN"`
+	DateTimeLegalAge           string `json:"dtLA"`
+}
+
+type VerifyReq struct {
+	SessionId        string `json:"sessionId"`
+	VerificationCode int    `json:"verificationCode"`
+}
+
+type VerifyResp struct {
+	BaseResponse
+	AccessToken         string `json:"accessToken"`
+	AccountAlreadyExist bool   `json:"accountAlreadyExist"`
 }

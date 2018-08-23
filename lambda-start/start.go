@@ -10,7 +10,7 @@ import (
 	"os"
 	"../sys_log"
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/ringoid/auth/apimodel"
+	"../apimodel"
 	"encoding/json"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -31,19 +31,18 @@ var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 
 const (
-	region     = "eu-west-2"
+	region     = "eu-west-1"
 	maxRetries = 3
 
 	twilioApiKeyName    = "twilio-api-key"
 	twilioSecretKeyBase = "%s/Twilio/Api/Key"
-
-	sessionGSIName = "sessionGSI"
 
 	phoneColumnName     = "phone"
 	userIdColumnName    = "user_id"
 	sessionIdColumnName = "session_id"
 
 	countryCodeColumnName = "country_code"
+	phoneNumberColumnName = "phone_number"
 	timeColumnName        = "time"
 )
 
@@ -154,6 +153,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		SessionId:   sessionId.String(),
 		Phone:       fullPhone,
 		CountryCode: reqParam.CountryCallingCode,
+		PhoneNumber: reqParam.Phone,
 	}
 
 	resUserId, resSessionId, wasCreated, ok, errStr := createUserInfo(userInfo)
@@ -165,8 +165,6 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	if wasCreated {
 		anlogger.Debugf("start.go : new user was created with userId %s and sessionId %s", resUserId, resSessionId)
 		resp.SessionId = resSessionId
-		event := apimodel.NewUserAcceptTermsEvent(*reqParam, sourceIp, resUserId)
-		sendAnalyticEvent(event)
 	} else {
 		newSessionId, ok, errStr := updateSessionId(userInfo.Phone, userInfo.SessionId)
 		if !ok {
@@ -176,6 +174,9 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		anlogger.Debugf("start.go : user with such phone %s already exist, new sessionId id was generated %s",
 			userInfo.Phone, resp.SessionId)
 	}
+	//send analytics event
+	event := apimodel.NewUserAcceptTermsEvent(*reqParam, sourceIp, resUserId)
+	sendAnalyticEvent(event)
 
 	//send sms
 	ok, errorStr := startVerify(reqParam.CountryCallingCode, reqParam.Phone, reqParam.Locale)
@@ -233,6 +234,7 @@ func createUserInfo(userInfo *apimodel.UserInfo) (string, string, bool, bool, st
 				"#sessionId": aws.String(sessionIdColumnName),
 
 				"#countryCode": aws.String(countryCodeColumnName),
+				"#phoneNumber": aws.String(phoneNumberColumnName),
 				"#time":        aws.String(timeColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
@@ -246,6 +248,9 @@ func createUserInfo(userInfo *apimodel.UserInfo) (string, string, bool, bool, st
 				":cV": {
 					S: aws.String(strconv.Itoa(userInfo.CountryCode)),
 				},
+				":pnV": {
+					S: aws.String(userInfo.PhoneNumber),
+				},
 				":tV": {
 					S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
 				},
@@ -258,7 +263,7 @@ func createUserInfo(userInfo *apimodel.UserInfo) (string, string, bool, bool, st
 			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", userIdColumnName)),
 
 			TableName:        aws.String(userTableName),
-			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #time = :tV"),
+			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV"),
 			ReturnValues:     aws.String("ALL_NEW"),
 		}
 
@@ -280,51 +285,6 @@ func createUserInfo(userInfo *apimodel.UserInfo) (string, string, bool, bool, st
 	return resUserId, resSessionId, true, true, ""
 }
 
-//return userInfo, is everything ok and error string
-func fetchBySessionId(sessionId string) (*apimodel.UserInfo, bool, string) {
-	input := &dynamodb.QueryInput{
-		ExpressionAttributeNames: map[string]*string{
-			"#sessionId": aws.String(sessionIdColumnName),
-		},
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":sV": {
-				S: aws.String(sessionId),
-			},
-		},
-		KeyConditionExpression: aws.String("#sessionId = :sV"),
-		IndexName:              aws.String(sessionGSIName),
-		TableName:              aws.String(userTableName),
-	}
-
-	res, err := awsDbClient.Query(input)
-
-	if err != nil {
-		anlogger.Errorf("start.go : error while fetch userInfo by sessionId : %v", err)
-		return &apimodel.UserInfo{}, false, apimodel.InternalServerError
-	}
-
-	if len(res.Items) != 1 {
-		anlogger.Errorf("start.go : error several userInfo by one sessionId")
-		return &apimodel.UserInfo{}, false, apimodel.InternalServerError
-	}
-	userId := *res.Items[0][userIdColumnName].S
-	sessId := *res.Items[0][sessionIdColumnName].S
-	phone := *res.Items[0][phoneColumnName].S
-
-	countryCode, err := strconv.Atoi(*res.Items[0][countryCodeColumnName].S)
-	if err != nil {
-		anlogger.Errorf("start.go : error while parsing country code : %v", err)
-		return &apimodel.UserInfo{}, false, apimodel.InternalServerError
-	}
-
-	return &apimodel.UserInfo{
-		UserId:      userId,
-		SessionId:   sessId,
-		Phone:       phone,
-		CountryCode: countryCode,
-	}, true, ""
-}
-
 func parseParams(params string) (*apimodel.StartReq, bool) {
 	var req apimodel.StartReq
 	err := json.Unmarshal([]byte(params), &req)
@@ -334,7 +294,8 @@ func parseParams(params string) (*apimodel.StartReq, bool) {
 		return nil, false
 	}
 
-	if req.CountryCallingCode == 0 || req.Phone == "" || req.Device == "" || req.Os == "" || req.Screen == "" {
+	if req.CountryCallingCode == 0 || req.Phone == "" || req.DateTimeTermsAndConditions == "" ||
+		req.DateTimePrivacyNotes == "" || req.DateTimeLegalAge == "" {
 		anlogger.Errorf("start.go : one of the required param is nil, req %v", req)
 		return nil, false
 	}
@@ -367,9 +328,9 @@ func startVerify(code int, number, locale string) (bool, string) {
 	if len(locale) != 0 {
 		params = fmt.Sprintf("via=sms&&phone_number=%s&&country_code=%d&&locale=%s", number, code, locale)
 	}
-	req, err := http.NewRequest("POST",
-		"https://api.authy.com/protected/json/phones/verification/start",
-		strings.NewReader(params))
+	url := "https://api.authy.com/protected/json/phones/verification/start"
+
+	req, err := http.NewRequest("POST", url, strings.NewReader(params))
 
 	if err != nil {
 		anlogger.Errorf("start.go : error while construct the request : %v", err)
@@ -380,6 +341,9 @@ func startVerify(code int, number, locale string) (bool, string) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	client := &http.Client{}
+
+	anlogger.Debugf("start.go : make POST request by url %s with params %s", url, params)
+
 	resp, err := client.Do(req)
 	if err != nil {
 		anlogger.Errorf("start.go error while making request : %v", err)
