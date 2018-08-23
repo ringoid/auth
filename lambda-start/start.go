@@ -43,7 +43,7 @@ const (
 
 	countryCodeColumnName = "country_code"
 	phoneNumberColumnName = "phone_number"
-	timeColumnName        = "time"
+	updatedTimeColumnName = "updated_at"
 )
 
 func init() {
@@ -59,28 +59,28 @@ func init() {
 		fmt.Printf("start.go : env can not be empty ENV")
 		os.Exit(1)
 	}
-	fmt.Printf("start.go : start with ENV = %s", env)
+	fmt.Printf("start.go : start with ENV = [%s]", env)
 
 	papertrailAddress, ok = os.LookupEnv("PAPERTRAIL_LOG_ADDRESS")
 	if !ok {
 		fmt.Printf("start.go : env can not be empty PAPERTRAIL_LOG_ADDRESS")
 		os.Exit(1)
 	}
-	fmt.Printf("start.go : start with PAPERTRAIL_LOG_ADDRESS = %s", papertrailAddress)
+	fmt.Printf("start.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]", papertrailAddress)
 
 	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "start-auth"))
 	if err != nil {
 		fmt.Errorf("start.go : error during startup : %v", err)
 		os.Exit(1)
 	}
-	anlogger.Infoln("start.go : logger was successfully initialized")
+	anlogger.Debugf("start.go : logger was successfully initialized")
 
 	userTableName, ok = os.LookupEnv("USER_TABLE")
 	if !ok {
 		fmt.Printf("start.go : env can not be empty USER_TABLE")
 		os.Exit(1)
 	}
-	anlogger.Infof("start.go : start with USER_TABLE = %s", userTableName)
+	anlogger.Debugf("start.go : start with USER_TABLE = [%s]", userTableName)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
 		WithRegion(region).WithMaxRetries(maxRetries).
@@ -88,7 +88,7 @@ func init() {
 	if err != nil {
 		anlogger.Fatalf("start.go : error during initialization : %v", err)
 	}
-	anlogger.Infoln("start.go : aws session was successfully initialized")
+	anlogger.Debugf("start.go : aws session was successfully initialized")
 
 	twilioSecretKeyName = fmt.Sprintf(twilioSecretKeyBase, env)
 	svc := secretsmanager.New(awsSession)
@@ -98,32 +98,32 @@ func init() {
 
 	result, err := svc.GetSecretValue(input)
 	if err != nil {
-		anlogger.Fatalf("start.go : error reading %s secret from Secret Manager : %v", twilioSecretKeyName, err)
+		anlogger.Fatalf("start.go : error reading [%s] secret from Secret Manager : %v", twilioSecretKeyName, err)
 	}
 	var secretMap map[string]string
 	decoder := json.NewDecoder(strings.NewReader(*result.SecretString))
 	err = decoder.Decode(&secretMap)
 	if err != nil {
-		anlogger.Fatalf("start.go : error decode %s secret from Secret Manager : %v", twilioSecretKeyName, err)
+		anlogger.Fatalf("start.go : error decode [%s] secret from Secret Manager : %v", twilioSecretKeyName, err)
 	}
 	twilioKey, ok = secretMap[twilioApiKeyName]
 	if !ok {
 		anlogger.Fatalln("start.go : Twilio Api Key is empty")
 	}
-	anlogger.Infoln("start.go : Twilio Api Key was successfully initialized")
+	anlogger.Debugf("start.go : Twilio Api Key was successfully initialized")
 
 	awsDbClient = dynamodb.New(awsSession)
-	anlogger.Infoln("start.go : dynamodb client was successfully initialized")
+	anlogger.Debugf("start.go : dynamodb client was successfully initialized")
 
 	deliveryStreamName, ok = os.LookupEnv("DELIVERY_STREAM")
 	if !ok {
 		anlogger.Fatalf("start.go : env can not be empty DELIVERY_STREAM")
 		os.Exit(1)
 	}
-	anlogger.Infof("start.go : start with DELIVERY_STREAM = %s", deliveryStreamName)
+	anlogger.Debugf("start.go : start with DELIVERY_STREAM = [%s]", deliveryStreamName)
 
 	awsDeliveryStreamClient = firehose.New(awsSession)
-	anlogger.Infoln("start.go : firehose client was successfully initialized")
+	anlogger.Debugf("start.go : firehose client was successfully initialized")
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -199,10 +199,14 @@ func updateSessionId(phone, sessionId string) (string, bool, string) {
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
 				"#sessionId": aws.String(sessionIdColumnName),
+				"#time":      aws.String(updatedTimeColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":sV": {
 					S: aws.String(fmt.Sprint(sessionId)),
+				},
+				":tV": {
+					S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
 				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
@@ -211,7 +215,7 @@ func updateSessionId(phone, sessionId string) (string, bool, string) {
 				},
 			},
 			TableName:        aws.String(userTableName),
-			UpdateExpression: aws.String("SET #sessionId = :sV"),
+			UpdateExpression: aws.String("SET #sessionId = :sV, #time = :tV"),
 			ReturnValues:     aws.String("ALL_NEW"),
 		}
 
@@ -235,7 +239,7 @@ func createUserInfo(userInfo *apimodel.UserInfo) (string, string, bool, bool, st
 
 				"#countryCode": aws.String(countryCodeColumnName),
 				"#phoneNumber": aws.String(phoneNumberColumnName),
-				"#time":        aws.String(timeColumnName),
+				"#time":        aws.String(updatedTimeColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":uV": {
@@ -290,7 +294,7 @@ func parseParams(params string) (*apimodel.StartReq, bool) {
 	err := json.Unmarshal([]byte(params), &req)
 
 	if err != nil {
-		anlogger.Errorf("start.go : error parsing required params : %v", err)
+		anlogger.Errorf("start.go : error parsing required params from the string %s : %v", params, err)
 		return nil, false
 	}
 

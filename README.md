@@ -56,8 +56,8 @@ Headers:
 Body:
 
     {
-        "SessionId":"sdkjfhh-dfsdf-e333",
-        "VerificationCode":6121
+        "sessionId":"sdkjfhh-dfsdf-e333",
+        "verificationCode":6121
     }
     
     all parameters are required
@@ -66,6 +66,7 @@ Body:
  
     {
         "accessToken":"aslkdjflkjh-sdfasdfsadf-dd",
+        "accountAlreadyExist":false,
         "errorCode":"",
         "errorMessage":""
     }
@@ -73,8 +74,45 @@ Body:
 Possible errorCodes:
 
 * InternalServerError
+* WrongRequestParamsClientError
 * WrongSessionIdClientError
 * NoPendingVerificationClientError
+* WrongVerificationCodeClientError
+
+### Create user profile
+
+* url ``https://{API ENDPOINT}/Prod/create_profile``
+
+POST request
+
+Headers:
+
+* Content-Type : application/json
+
+Body:
+
+    {
+        "accessToken":"adasdasd-fadfs-sdffd",
+        "yearOfBirth":1982,
+        "sex":"male" // possible values are **male** or **female** 
+    }
+    
+    all parameters are required
+    
+ Response Body:
+ 
+    {
+        "errorCode":"",
+        "errorMessage":""
+    }
+    
+Possible errorCodes:
+
+* InternalServerError
+* WrongYearOfBirthClientError
+* WrongSexClientError
+* WrongRequestParamsClientError
+* InvalidAccessTokenClientError
 
 ## Analytics Events
 
@@ -98,3 +136,13 @@ Possible errorCodes:
 * eventType - string (AUTH_USER_COMPLETE_VERIFICATION)
 
 `{"userId":"aslkdl-asfmfa-asd","unixTime":1534338646,"eventType":"AUTH_USER_COMPLETE_VERIFICATION"}`
+
+3. AUTH_USER_PROFILE_CREATED
+
+* userId - string
+* sex - string
+* yearOfBirth - int
+* unixTime - int
+* eventType - string (AUTH_USER_PROFILE_CREATED)
+
+`{"userId":"aslkdl-asfmfa-asd","sex":"male","yearOfBirth":"1982","unixTime":1534338646,"eventType":"AUTH_USER_PROFILE_CREATED"}`

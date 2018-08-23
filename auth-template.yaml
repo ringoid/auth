@@ -25,7 +25,7 @@ Mappings:
       rcucrt: should-be-prod-value
       rcumin: should-be-prod-value
 
-  AccessTokenTableCUMap:
+  UserProfileTableCUMap:
     stage:
       wcumax: 1
       wcucrt: 1
@@ -60,10 +60,15 @@ Globals:
           Variables:
             ENV: !Ref Env
             PAPERTRAIL_LOG_ADDRESS: !FindInMap [LogMap, PapertrailLog, !Ref Env]
-            USER_TABLE: !Ref UserTable
             DELIVERY_STREAM:
               Fn::ImportValue:
                 !Join [ "-", [ !Ref Env, DeliveryStreamExportName] ]
+            USER_TABLE: !Ref UserTable
+            USER_PROFILE_TABLE: !Ref UserProfileTable
+            NEO4J_URL:
+              Fn::ImportValue:
+                !Join [ "-", [ !Ref Env, Neo4jLoadBalancerUrlExport] ]
+
         Tags:
           Company: Ringoid
           Service: auth
@@ -132,12 +137,6 @@ Resources:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
         - AmazonKinesisFirehoseFullAccess
-      Environment:
-        Variables:
-          ACCESS_TOKEN_TABLE: !Ref AccessTokenTable
-          NEO4J_URL:
-            Fn::ImportValue:
-              !Join [ "-", [ !Ref Env, Neo4jLoadBalancerUrlExport] ]
 
       Events:
         CompleteEvent:
@@ -146,10 +145,30 @@ Resources:
             Path: /complete_verification
             Method: post
 
-  AccessTokenTable:
+  CreateAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Join [ "-", [ !Ref Env, create-auth] ]
+      Handler: create
+      CodeUri: ./create-auth.zip
+      Description: Create user profile auth function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - SecretsManagerReadWrite
+        - AmazonKinesisFirehoseFullAccess
+
+      Events:
+        CompleteEvent:
+          Type: Api
+          Properties:
+            Path: /create_profile
+            Method: post
+
+
+  UserProfileTable:
     Type: AWS::DynamoDB::Table
     Properties:
-          TableName: !Join [ "-", [ !Ref Env, Auth, AccessTokenTable] ]
+          TableName: !Join [ "-", [ !Ref Env, Auth, UserProfileTable] ]
           AttributeDefinitions:
             -
               AttributeName: user_id
@@ -163,8 +182,8 @@ Resources:
               KeyType: HASH
 
           ProvisionedThroughput:
-            ReadCapacityUnits: !FindInMap [AccessTokenTableCUMap, !Ref Env, rcucrt]
-            WriteCapacityUnits: !FindInMap [AccessTokenTableCUMap, !Ref Env, wcucrt]
+            ReadCapacityUnits: !FindInMap [UserProfileTableCUMap, !Ref Env, rcucrt]
+            WriteCapacityUnits: !FindInMap [UserProfileTableCUMap, !Ref Env, wcucrt]
 
           GlobalSecondaryIndexes:
             -
@@ -176,8 +195,8 @@ Resources:
               Projection:
                 ProjectionType: ALL
               ProvisionedThroughput:
-                ReadCapacityUnits: !FindInMap [AccessTokenTableCUMap, !Ref Env, rcucrt]
-                WriteCapacityUnits: !FindInMap [AccessTokenTableCUMap, !Ref Env, wcucrt]
+                ReadCapacityUnits: !FindInMap [UserProfileTableCUMap, !Ref Env, rcucrt]
+                WriteCapacityUnits: !FindInMap [UserProfileTableCUMap, !Ref Env, wcucrt]
 
           Tags:
             - Key: Company
@@ -187,46 +206,46 @@ Resources:
             - Key: Environment
               Value: !Ref Env
 
-  AccessTokenTableWriteCapacityScalableTarget:
+  UserProfileTableWriteCapacityScalableTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: AccessTokenTable
+    DependsOn: UserProfileTable
     Properties:
-      MaxCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, wcumax]
-      MinCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, wcumin]
+      MaxCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, wcumax]
+      MinCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, wcumin]
       ResourceId: !Join
         - /
         - - table
-          - !Join [ "-", [ !Ref Env, Auth, AccessTokenTable] ]
+          - !Join [ "-", [ !Ref Env, Auth, UserProfileTable] ]
       RoleARN: !GetAtt
         - ScalingRole
         - Arn
       ScalableDimension: "dynamodb:table:WriteCapacityUnits"
       ServiceNamespace: dynamodb
 
-  AccessTokenTableReadCapacityScalableTarget:
+  UserProfileTableReadCapacityScalableTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: AccessTokenTable
+    DependsOn: UserProfileTable
     Properties:
-      MaxCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, rcumax]
-      MinCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, rcumin]
+      MaxCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, rcumax]
+      MinCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, rcumin]
       ResourceId: !Join
         - /
         - - table
-          - !Join [ "-", [ !Ref Env, Auth, AccessTokenTable] ]
+          - !Join [ "-", [ !Ref Env, Auth, UserProfileTable] ]
       RoleARN: !GetAtt
         - ScalingRole
         - Arn
       ScalableDimension: "dynamodb:table:ReadCapacityUnits"
       ServiceNamespace: dynamodb
 
-  AccessTokenTableWriteScalingPolicy:
+  UserProfileTableWriteScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: AccessTokenTable
+    DependsOn: UserProfileTable
     Properties:
       PolicyName: WriteAutoScalingPolicy
       PolicyType: TargetTrackingScaling
       ScalingTargetId:
-        Ref: AccessTokenTableWriteCapacityScalableTarget
+        Ref: UserProfileTableWriteCapacityScalableTarget
       TargetTrackingScalingPolicyConfiguration:
         TargetValue: 70
         ScaleInCooldown: 60
@@ -234,14 +253,14 @@ Resources:
         PredefinedMetricSpecification:
           PredefinedMetricType: DynamoDBWriteCapacityUtilization
 
-  AccessTokenTableReadScalingPolicy:
+  UserProfileTableReadScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: AccessTokenTable
+    DependsOn: UserProfileTable
     Properties:
       PolicyName: ReadAutoScalingPolicy
       PolicyType: TargetTrackingScaling
       ScalingTargetId:
-        Ref: AccessTokenTableReadCapacityScalableTarget
+        Ref: UserProfileTableReadCapacityScalableTarget
       TargetTrackingScalingPolicyConfiguration:
         TargetValue: 70
         ScaleInCooldown: 60
@@ -249,16 +268,16 @@ Resources:
         PredefinedMetricSpecification:
           PredefinedMetricType: DynamoDBReadCapacityUtilization
 
-  AccessTokenTableAccessTokenGSIWriteCapacityScalableTarget:
+  UserProfileTableAccessTokenGSIWriteCapacityScalableTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: AccessTokenTable
+    DependsOn: UserProfileTable
     Properties:
-      MaxCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, wcumax]
-      MinCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, wcumin]
+      MaxCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, wcumax]
+      MinCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, wcumin]
       ResourceId: !Join
         - /
         - - table
-          - !Join [ "-", [ !Ref Env, Auth, AccessTokenTable] ]
+          - !Join [ "-", [ !Ref Env, Auth, UserProfileTable] ]
           - index
           - accessTokenGSI
       RoleARN: !GetAtt
@@ -267,16 +286,16 @@ Resources:
       ScalableDimension: "dynamodb:index:WriteCapacityUnits"
       ServiceNamespace: dynamodb
 
-  AccessTokenTableAccessTokenGSIReadCapacityScalableTarget:
+  UserProfileTableAccessTokenGSIReadCapacityScalableTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: AccessTokenTable
+    DependsOn: UserProfileTable
     Properties:
-      MaxCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, rcumax]
-      MinCapacity: !FindInMap [AccessTokenTableCUMap, !Ref Env, rcumin]
+      MaxCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, rcumax]
+      MinCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, rcumin]
       ResourceId: !Join
         - /
         - - table
-          - !Join [ "-", [ !Ref Env, Auth, AccessTokenTable] ]
+          - !Join [ "-", [ !Ref Env, Auth, UserProfileTable] ]
           - index
           - accessTokenGSI
       RoleARN: !GetAtt
@@ -285,14 +304,14 @@ Resources:
       ScalableDimension: "dynamodb:index:ReadCapacityUnits"
       ServiceNamespace: dynamodb
 
-  AccessTokenTableAccessTokenGSIWriteScalingPolicy:
+  UserProfileTableAccessTokenGSIWriteScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: AccessTokenTable
+    DependsOn: UserProfileTable
     Properties:
       PolicyName: WriteAutoScalingPolicy
       PolicyType: TargetTrackingScaling
       ScalingTargetId:
-        Ref: AccessTokenTableAccessTokenGSIWriteCapacityScalableTarget
+        Ref: UserProfileTableAccessTokenGSIWriteCapacityScalableTarget
       TargetTrackingScalingPolicyConfiguration:
         TargetValue: 70
         ScaleInCooldown: 60
@@ -300,14 +319,14 @@ Resources:
         PredefinedMetricSpecification:
           PredefinedMetricType: DynamoDBWriteCapacityUtilization
 
-  AccessTokenTableAccessTokenGSIReadScalingPolicy:
+  UserProfileTableAccessTokenGSIReadScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: AccessTokenTable
+    DependsOn: UserProfileTable
     Properties:
       PolicyName: ReadAutoScalingPolicy
       PolicyType: TargetTrackingScaling
       ScalingTargetId:
-        Ref: AccessTokenTableAccessTokenGSIReadCapacityScalableTarget
+        Ref: UserProfileTableAccessTokenGSIReadCapacityScalableTarget
       TargetTrackingScalingPolicyConfiguration:
         TargetValue: 70
         ScaleInCooldown: 60

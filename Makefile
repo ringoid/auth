@@ -5,12 +5,16 @@ build:
 	GOOS=linux go build lambda-start/start.go
 	@echo '--- Building complete-auth function ---'
 	GOOS=linux go build lambda-complete/complete.go
+	@echo '--- Building create-profile-auth function ---'
+	GOOS=linux go build lambda-create/create.go
 
 zip_lambda: build
 	@echo '--- Zip start-auth function ---'
 	zip start-auth.zip ./start
 	@echo '--- Zip complete-auth function ---'
 	zip complete-auth.zip ./complete
+	@echo '--- Zip create-profile-auth function ---'
+	zip create-auth.zip ./create
 
 stage-deploy: zip_lambda
 	@echo '--- Build lambda stage ---'
@@ -26,4 +30,6 @@ clean:
 	rm -rf start-auth.zip
 	rm -rf complete
 	rm -rf complete-auth.zip
+	rm -rf create-auth.zip
+	rm -rf create
 

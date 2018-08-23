@@ -20,13 +20,14 @@ import (
 	"net/http"
 	"io/ioutil"
 	"github.com/satori/go.uuid"
+	"time"
 )
 
 var anlogger *syslog.Logger
 var twilioKey string
 var awsDbClient *dynamodb.DynamoDB
 var userTableName string
-var accessTokenTableName string
+var userProfileTable string
 var neo4jurl string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
@@ -44,11 +45,12 @@ const (
 	userIdColumnName    = "user_id"
 	sessionIdColumnName = "session_id"
 
-	countryCodeColumnName = "country_code"
-	phoneNumberColumnName = "phone_number"
-	timeColumnName        = "time"
+	countryCodeColumnName      = "country_code"
+	phoneNumberColumnName      = "phone_number"
+	tokenUpdatedTimeColumnName = "token_updated_at"
 
 	accessTokenColumnName = "access_token"
+	sexColumnName         = "sex"
 )
 
 func init() {
@@ -64,42 +66,42 @@ func init() {
 		fmt.Printf("complete.go : env can not be empty ENV")
 		os.Exit(1)
 	}
-	fmt.Printf("complete.go : start with ENV = %s", env)
+	fmt.Printf("complete.go : start with ENV = [%s]", env)
 
 	papertrailAddress, ok = os.LookupEnv("PAPERTRAIL_LOG_ADDRESS")
 	if !ok {
 		fmt.Printf("complete.go : env can not be empty PAPERTRAIL_LOG_ADDRESS")
 		os.Exit(1)
 	}
-	fmt.Printf("complete.go : start with PAPERTRAIL_LOG_ADDRESS = %s", papertrailAddress)
+	fmt.Printf("complete.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]", papertrailAddress)
 
-	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "start-auth"))
+	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "complete-auth"))
 	if err != nil {
 		fmt.Errorf("complete.go : error during startup : %v", err)
 		os.Exit(1)
 	}
-	anlogger.Infoln("complete.go : logger was successfully initialized")
+	anlogger.Debugf("complete.go : logger was successfully initialized")
 
 	userTableName, ok = os.LookupEnv("USER_TABLE")
 	if !ok {
 		fmt.Printf("complete.go : env can not be empty USER_TABLE")
 		os.Exit(1)
 	}
-	anlogger.Infof("complete.go : start with USER_TABLE = %s", userTableName)
+	anlogger.Debugf("complete.go : start with USER_TABLE = [%s]", userTableName)
 
 	neo4jurl, ok = os.LookupEnv("NEO4J_URL")
 	if !ok {
 		fmt.Printf("complete.go : env can not be empty NEO4J_URL")
 		os.Exit(1)
 	}
-	anlogger.Infof("complete.go : start with NEO4J_URL = %s", neo4jurl)
+	anlogger.Debugf("complete.go : start with NEO4J_URL = [%s]", neo4jurl)
 
-	accessTokenTableName, ok = os.LookupEnv("ACCESS_TOKEN_TABLE")
+	userProfileTable, ok = os.LookupEnv("USER_PROFILE_TABLE")
 	if !ok {
-		fmt.Printf("complete.go : env can not be empty ACCESS_TOKEN_TABLE")
+		fmt.Printf("complete.go : env can not be empty USER_PROFILE_TABLE")
 		os.Exit(1)
 	}
-	anlogger.Infof("complete.go : start with ACCESS_TOKEN_TABLE = %s", accessTokenTableName)
+	anlogger.Debugf("complete.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
 		WithRegion(region).WithMaxRetries(maxRetries).
@@ -107,7 +109,7 @@ func init() {
 	if err != nil {
 		anlogger.Fatalf("complete.go : error during initialization : %v", err)
 	}
-	anlogger.Infoln("complete.go : aws session was successfully initialized")
+	anlogger.Debugf("complete.go : aws session was successfully initialized")
 
 	twilioSecretKeyName = fmt.Sprintf(twilioSecretKeyBase, env)
 	svc := secretsmanager.New(awsSession)
@@ -129,20 +131,20 @@ func init() {
 	if !ok {
 		anlogger.Fatalln("complete.go : Twilio Api Key is empty")
 	}
-	anlogger.Infoln("complete.go : Twilio Api Key was successfully initialized")
+	anlogger.Debugf("complete.go : Twilio Api Key was successfully initialized")
 
 	awsDbClient = dynamodb.New(awsSession)
-	anlogger.Infoln("complete.go : dynamodb client was successfully initialized")
+	anlogger.Debugf("complete.go : dynamodb client was successfully initialized")
 
 	deliveryStreamName, ok = os.LookupEnv("DELIVERY_STREAM")
 	if !ok {
 		anlogger.Fatalf("complete.go : env can not be empty DELIVERY_STREAM")
 		os.Exit(1)
 	}
-	anlogger.Infof("complete.go : start with DELIVERY_STREAM = %s", deliveryStreamName)
+	anlogger.Debugf("complete.go : start with DELIVERY_STREAM = [%s]", deliveryStreamName)
 
 	awsDeliveryStreamClient = firehose.New(awsSession)
-	anlogger.Infoln("complete.go : firehose client was successfully initialized")
+	anlogger.Debugf("complete.go : firehose client was successfully initialized")
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -189,27 +191,39 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 //return do we already have such user, ok, errorString if not ok
 func updateAccessToke(userId, accessToken string) (bool, bool, string) {
-	input := &dynamodb.PutItemInput{
-		Item: map[string]*dynamodb.AttributeValue{
+	input := &dynamodb.UpdateItemInput{
+		ExpressionAttributeNames: map[string]*string{
+			"#token":     aws.String(accessTokenColumnName),
+			"#updatedAt": aws.String(tokenUpdatedTimeColumnName),
+		},
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":tV": {
+				S: aws.String(accessToken),
+			},
+			":uV": {
+				S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
+			},
+		},
+		Key: map[string]*dynamodb.AttributeValue{
 			userIdColumnName: {
 				S: aws.String(userId),
 			},
-			accessTokenColumnName: {
-				S: aws.String(accessToken),
-			},
 		},
-		TableName:    aws.String(accessTokenTableName),
-		ReturnValues: aws.String("ALL_OLD"),
+		ReturnValues:     aws.String("ALL_OLD"),
+		TableName:        aws.String(userProfileTable),
+		UpdateExpression: aws.String("SET #token = :tV, #updatedAt = :uV"),
 	}
 
-	result, err := awsDbClient.PutItem(input)
+	result, err := awsDbClient.UpdateItem(input)
+
 	if err != nil {
 		anlogger.Errorf("complete.go : error while save access token : %v", err)
 		return false, false, apimodel.InternalServerError
 	}
 
-	anlogger.Infof("complete.go : previous value accessToken %s", *result.Attributes[accessTokenColumnName].S)
-	_, ok := result.Attributes[accessTokenColumnName]
+	_, ok := result.Attributes[sexColumnName]
+
+	anlogger.Infof("complete.go : result from access to gender is %v", ok)
 	return ok, true, ""
 }
 
@@ -300,7 +314,7 @@ func parseParams(params string) (*apimodel.VerifyReq, bool) {
 	err := json.Unmarshal([]byte(params), &req)
 
 	if err != nil {
-		anlogger.Errorf("complete.go : error parsing required params : %v", err)
+		anlogger.Errorf("complete.go : error parsing required params from the string %s : %v", params, err)
 		return nil, false
 	}
 

@@ -9,6 +9,10 @@ const (
 	WrongSessionIdClientError        = `{"errorCode":"WrongSessionIdClientError","errorMessage":"Session id is invalid"}`
 	NoPendingVerificationClientError = `{"errorCode":"NoPendingVerificationClientError","errorMessage":"No pending verifications found"}`
 	WrongVerificationCodeClientError = `{"errorCode":"WrongVerificationCodeClientError","errorMessage":"Wrong verification code"}`
+
+	WrongYearOfBirthClientError   = `{"errorCode":"WrongYearOfBirthClientError","errorMessage":"Wrong year of birth"}`
+	WrongSexClientError           = `{"errorCode":"WrongSexClientError","errorMessage":"Wrong sex"}`
+	InvalidAccessTokenClientError = `{"errorCode":"InvalidAccessTokenClientError","errorMessage":"Invalid access token"}`
 )
 
 type BaseResponse struct {
@@ -40,4 +44,10 @@ type VerifyResp struct {
 	BaseResponse
 	AccessToken         string `json:"accessToken"`
 	AccountAlreadyExist bool   `json:"accountAlreadyExist"`
+}
+
+type CreateReq struct {
+	AccessToken string `json:"accessToken"`
+	YearOfBirth int    `json:"yearOfBirth"`
+	Sex         string `json:"sex"`
 }
