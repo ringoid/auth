@@ -294,7 +294,7 @@ func parseParams(params string) (*apimodel.StartReq, bool) {
 	err := json.Unmarshal([]byte(params), &req)
 
 	if err != nil {
-		anlogger.Errorf("start.go : error parsing required params from the string %s : %v", params, err)
+		anlogger.Errorf("start.go : error parsing required params from the body string [%s] : %v", params, err)
 		return nil, false
 	}
 

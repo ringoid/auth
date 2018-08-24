@@ -124,6 +124,7 @@ Possible errorCodes:
 * unixTime - int
 * eventType - string (AUTH_USER_ACCEPT_TERMS)
 * locale - string
+* clientValidationFail - was phone number's validation failed on client side
 * dtTC - date and time when Terms and conditions were accepted
 * dtPN - date and time when Privacy Notes were accepted
 * dtLA - date and time when Legal age was confirmed

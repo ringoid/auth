@@ -29,6 +29,7 @@ type AuthResp struct {
 type StartReq struct {
 	CountryCallingCode         int    `json:"countryCallingCode"`
 	Phone                      string `json:"phone"`
+	ClientValidationFail       bool   `json:"clientValidationFail"`
 	Locale                     string `json:"locale"`
 	DateTimeTermsAndConditions string `json:"dtTC"`
 	DateTimePrivacyNotes       string `json:"dtPN"`

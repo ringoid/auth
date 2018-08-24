@@ -6,6 +6,7 @@ type UserAcceptTermsEvent struct {
 	UserId                     string `json:"userId"`
 	Locale                     string `json:"locale"`
 	SourceIp                   string `json:"sourceIp"`
+	ClientValidationFail       bool   `json:"clientValidationFail"`
 	UnixTime                   int64  `json:"unixTime"`
 	EventType                  string `json:"eventType"`
 	DateTimeTermsAndConditions string `json:"dtTC"`
@@ -20,6 +21,7 @@ func NewUserAcceptTermsEvent(req StartReq, sourceIp, userId string) UserAcceptTe
 		//gdpr?
 		SourceIp: sourceIp,
 
+		ClientValidationFail:       req.ClientValidationFail,
 		UnixTime:                   time.Now().Unix(),
 		DateTimeLegalAge:           req.DateTimeLegalAge,
 		DateTimePrivacyNotes:       req.DateTimePrivacyNotes,
