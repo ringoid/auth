@@ -20,13 +20,13 @@ type StartReq struct {
 	Phone                      string `json:"phone"`
 	ClientValidationFail       bool   `json:"clientValidationFail"`
 	Locale                     string `json:"locale"`
-	DateTimeTermsAndConditions string `json:"dtTC"`
-	DateTimePrivacyNotes       string `json:"dtPN"`
-	DateTimeLegalAge           string `json:"dtLA"`
+	DateTimeTermsAndConditions int64 `json:"dtTC"`
+	DateTimePrivacyNotes       int64 `json:"dtPN"`
+	DateTimeLegalAge           int64 `json:"dtLA"`
 }
 
 func (req StartReq) String() string {
-	return fmt.Sprintf("[StartReq={countryCallingCode=%s, phone=%s, clientValidationFail=%s, locale=%s, dtTC=%s, dtPN=%s, dtLA=%s}]",
+	return fmt.Sprintf("[StartReq={countryCallingCode=%s, phone=%s, clientValidationFail=%s, locale=%s, dtTC=%v, dtPN=%v, dtLA=%v}]",
 		req.CountryCallingCode, req.Phone, req.ClientValidationFail, req.Locale, req.DateTimeTermsAndConditions, req.DateTimePrivacyNotes, req.DateTimeLegalAge)
 }
 

@@ -9,9 +9,9 @@ type UserAcceptTermsEvent struct {
 	ClientValidationFail       bool   `json:"clientValidationFail"`
 	UnixTime                   int64  `json:"unixTime"`
 	EventType                  string `json:"eventType"`
-	DateTimeTermsAndConditions string `json:"dtTC"`
-	DateTimePrivacyNotes       string `json:"dtPN"`
-	DateTimeLegalAge           string `json:"dtLA"`
+	DateTimeTermsAndConditions int64  `json:"dtTC"`
+	DateTimePrivacyNotes       int64  `json:"dtPN"`
+	DateTimeLegalAge           int64  `json:"dtLA"`
 }
 
 func NewUserAcceptTermsEvent(req StartReq, sourceIp, userId string) UserAcceptTermsEvent {

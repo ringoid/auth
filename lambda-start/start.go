@@ -299,8 +299,8 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Star
 		return nil, false
 	}
 
-	if req.CountryCallingCode == 0 || req.Phone == "" || req.DateTimeTermsAndConditions == "" ||
-		req.DateTimePrivacyNotes == "" || req.DateTimeLegalAge == "" {
+	if req.CountryCallingCode == 0 || req.Phone == "" || req.DateTimeTermsAndConditions == 0 ||
+		req.DateTimePrivacyNotes == 0 || req.DateTimeLegalAge == 0 {
 		anlogger.Errorf(lc, "start.go : one of the required param is nil, req %v", req)
 		return nil, false
 	}
