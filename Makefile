@@ -7,6 +7,8 @@ build:
 	GOOS=linux go build lambda-complete/complete.go
 	@echo '--- Building create-profile-auth function ---'
 	GOOS=linux go build lambda-create/create.go
+	@echo '--- Building internal-get-user-id-auth function ---'
+	GOOS=linux go build lambda-internal-getuserid/internal_get_user_id.go
 
 zip_lambda: build
 	@echo '--- Zip start-auth function ---'
@@ -15,6 +17,8 @@ zip_lambda: build
 	zip complete-auth.zip ./complete
 	@echo '--- Zip create-profile-auth function ---'
 	zip create-auth.zip ./create
+	@echo '--- Zip internal-getuserid-auth function ---'
+	zip internal-getuserid-auth.zip ./internal_get_user_id
 
 stage-deploy: zip_lambda
 	@echo '--- Build lambda stage ---'
@@ -32,4 +36,6 @@ clean:
 	rm -rf complete-auth.zip
 	rm -rf create-auth.zip
 	rm -rf create
+	rm -rf internal_get_user_id
+	rm -rf internal-getuserid-auth.zip
 

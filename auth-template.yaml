@@ -154,7 +154,6 @@ Resources:
       Description: Create user profile auth function
       Policies:
         - AmazonDynamoDBFullAccess
-        - SecretsManagerReadWrite
         - AmazonKinesisFirehoseFullAccess
 
       Events:
@@ -164,6 +163,15 @@ Resources:
             Path: /create_profile
             Method: post
 
+  InternalGetUserIdFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Join [ "-", [ !Ref Env, internal-getuserid-auth] ]
+      Handler: internal_get_user_id
+      CodeUri: ./internal-getuserid-auth.zip
+      Description: Internal function to get userId
+      Policies:
+        - AmazonDynamoDBFullAccess
 
   UserProfileTable:
     Type: AWS::DynamoDB::Table
@@ -601,3 +609,11 @@ Outputs:
   CompleteAuthFunction:
       Description: "complete-auth lambda function ARN"
       Value: !GetAtt CompleteAuthFunction.Arn
+
+  InternalGetUserIdFunctionExport:
+    Value:
+      Fn::GetAtt:
+        - InternalGetUserIdFunction
+        - Arn
+    Export:
+      Name: !Join [ "-", [ !Ref Env, InternalGetUserIdFunctionExport] ]

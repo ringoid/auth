@@ -20,7 +20,6 @@ import (
 )
 
 var anlogger *syslog.Logger
-var twilioKey string
 var awsDbClient *dynamodb.DynamoDB
 var userProfileTable string
 var neo4jurl string

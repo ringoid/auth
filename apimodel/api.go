@@ -1,6 +1,8 @@
 package apimodel
 
-import "fmt"
+import (
+	"fmt"
+)
 
 //Request - Response model
 type AuthResp struct {
@@ -55,4 +57,21 @@ type CreateReq struct {
 
 func (req CreateReq) String() string {
 	return fmt.Sprintf("[CreateReq={accessToken=%s, yearOfBirth=%s, sex=%s}]", req.AccessToken, req.YearOfBirth, req.Sex)
+}
+
+type InternalGetUserIdReq struct {
+	AccessToken string `json:"accessToken"`
+}
+
+func (req InternalGetUserIdReq) String() string {
+	return fmt.Sprintf("[InternalGetUserIdReq={accessToken=%s}]", req.AccessToken)
+}
+
+type InternalGetUserIdResp struct {
+	Error  string `json:"error"`
+	UserId string `json:"userId"`
+}
+
+func (resp InternalGetUserIdResp) String() string {
+	return fmt.Sprintf("[InternalGetUserIdResp={error=%s, userId=%s}]", resp.Error, resp.UserId)
 }
