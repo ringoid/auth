@@ -29,7 +29,7 @@ func (req StartReq) String() string {
 
 type VerifyReq struct {
 	SessionId        string `json:"sessionId"`
-	VerificationCode int    `json:"verificationCode"`
+	VerificationCode string `json:"verificationCode"`
 }
 
 func (req VerifyReq) String() string {

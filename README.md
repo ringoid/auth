@@ -58,7 +58,7 @@ Body:
 
     {
         "sessionId":"sdkjfhh-dfsdf-e333",
-        "verificationCode":6121
+        "verificationCode":"6121"
     }
     
     all parameters are required

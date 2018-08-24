@@ -209,8 +209,8 @@ func updateAccessToke(userId, accessToken string, lc *lambdacontext.LambdaContex
 }
 
 //return ok and error string if not
-func completeVerify(userInfo *apimodel.UserInfo, verificationCode int, lc *lambdacontext.LambdaContext) (bool, string) {
-	url := fmt.Sprintf("https://api.authy.com/protected/json/phones/verification/check?phone_number=%s&country_code=%d&verification_code=%d",
+func completeVerify(userInfo *apimodel.UserInfo, verificationCode string, lc *lambdacontext.LambdaContext) (bool, string) {
+	url := fmt.Sprintf("https://api.authy.com/protected/json/phones/verification/check?phone_number=%s&country_code=%d&verification_code=%s",
 		userInfo.PhoneNumber, userInfo.CountryCode, verificationCode)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -279,8 +279,8 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Veri
 		return nil, false
 	}
 
-	if req.SessionId == "" || req.VerificationCode == 0 {
-		anlogger.Errorf(lc, "complete.go : one of the required param is nil, req %v", req)
+	if req.SessionId == "" || req.VerificationCode == "" {
+		anlogger.Errorf(lc, "complete.go : one of the required param is nil or empty, req %v", req)
 		return nil, false
 	}
 
