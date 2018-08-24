@@ -1,5 +1,9 @@
 package apimodel
 
+import (
+	"fmt"
+)
+
 const (
 	Region     = "eu-west-1"
 	MaxRetries = 3
@@ -43,4 +47,8 @@ const (
 type BaseResponse struct {
 	ErrorCode    string `json:"errorCode"`
 	ErrorMessage string `json:"errorMessage"`
+}
+
+func (resp BaseResponse) String() string {
+	return fmt.Sprintf("[BaseResponse={errorCode=%s, errorMessage=%s}", resp.ErrorCode, resp.ErrorMessage)
 }

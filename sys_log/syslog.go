@@ -5,6 +5,8 @@ import (
 	"log"
 	"io"
 	"log/syslog"
+	"github.com/aws/aws-lambda-go/lambdacontext"
+	"fmt"
 )
 
 type Logger struct {
@@ -35,44 +37,74 @@ func New(address, tag string) (*Logger, error) {
 	return &l, nil
 }
 
-func (l *Logger) Debugf(s string, args ...interface{}) {
+func (l *Logger) Debugf(ctx *lambdacontext.LambdaContext, s string, args ...interface{}) {
+	if ctx != nil {
+		s = fmt.Sprintf("[%s] %s", ctx.AwsRequestID, s)
+	}
 	l.debug.Printf(s, args...)
 }
 
-func (l *Logger) Debugln(s string) {
+func (l *Logger) Debugln(ctx *lambdacontext.LambdaContext, s string) {
+	if ctx != nil {
+		s = fmt.Sprintf("[%s] %s", ctx.AwsRequestID, s)
+	}
 	l.debug.Println(s)
 }
 
-func (l *Logger) Infof(s string, args ...interface{}) {
+func (l *Logger) Infof(ctx *lambdacontext.LambdaContext, s string, args ...interface{}) {
+	if ctx != nil {
+		s = fmt.Sprintf("[%s] %s", ctx.AwsRequestID, s)
+	}
 	l.info.Printf(s, args...)
 }
 
-func (l *Logger) Infoln(s string) {
+func (l *Logger) Infoln(ctx *lambdacontext.LambdaContext, s string) {
+	if ctx != nil {
+		s = fmt.Sprintf("[%s] %s", ctx.AwsRequestID, s)
+	}
 	l.info.Println(s)
 }
 
-func (l *Logger) Warnf(s string, args ...interface{}) {
+func (l *Logger) Warnf(ctx *lambdacontext.LambdaContext, s string, args ...interface{}) {
+	if ctx != nil {
+		s = fmt.Sprintf("[%s] %s", ctx.AwsRequestID, s)
+	}
 	l.warn.Printf(s, args...)
 }
 
-func (l *Logger) Warnln(s string) {
+func (l *Logger) Warnln(ctx *lambdacontext.LambdaContext, s string) {
+	if ctx != nil {
+		s = fmt.Sprintf("[%s] %s", ctx.AwsRequestID, s)
+	}
 	l.warn.Println(s)
 }
 
-func (l *Logger) Errorf(s string, args ...interface{}) {
+func (l *Logger) Errorf(ctx *lambdacontext.LambdaContext, s string, args ...interface{}) {
+	if ctx != nil {
+		s = fmt.Sprintf("[%s] %s", ctx.AwsRequestID, s)
+	}
 	l.error.Printf(s, args...)
 }
 
-func (l *Logger) Errorln(s string) {
+func (l *Logger) Errorln(ctx *lambdacontext.LambdaContext, s string) {
+	if ctx != nil {
+		s = fmt.Sprintf("[%s] %s", ctx.AwsRequestID, s)
+	}
 	l.error.Printf(s)
 }
 
-func (l *Logger) Fatalf(s string, args ...interface{}) {
+func (l *Logger) Fatalf(ctx *lambdacontext.LambdaContext, s string, args ...interface{}) {
+	if ctx != nil {
+		s = fmt.Sprintf("[%s] %s", ctx.AwsRequestID, s)
+	}
 	l.fatal.Printf(s, args...)
 	os.Exit(1)
 }
 
-func (l *Logger) Fatalln(s string) {
+func (l *Logger) Fatalln(ctx *lambdacontext.LambdaContext, s string) {
+	if ctx != nil {
+		s = fmt.Sprintf("[%s] %s", ctx.AwsRequestID, s)
+	}
 	l.fatal.Println(s)
 	os.Exit(1)
 }
@@ -80,4 +112,3 @@ func (l *Logger) Fatalln(s string) {
 func (l *Logger) AwsLog(args ...interface{}) {
 	l.aws.Println(args...)
 }
-
