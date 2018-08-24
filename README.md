@@ -21,7 +21,8 @@ Body:
         "dtTC":"2018-08-01 12:34:54 UTC+3", //date and time when Terms and Conditions were accepted
         "dtLA":"2018-08-01 12:34:55 UTC+3", //date and time when Privacy Notes were accepted
         "dtPN":"2018-08-01 12:34:56 UTC+3", //date and time when Legal age was confirmed
-        "locale":"en"
+        "locale":"en",
+        "clientValidationFail":true
     }
     
     all parameters are required except locale
@@ -127,7 +128,7 @@ Possible errorCodes:
 * dtPN - date and time when Privacy Notes were accepted
 * dtLA - date and time when Legal age was confirmed
 
-`{"userId":"aslkdl-asfmfa-asd","sourceIp":"82.102.27.75","unixTime":1534338646,"dtTC":"2018-08-01 12:34:54 UTC+3","dtPN":"2018-08-01 12:34:54 UTC+3","dtLA":"2018-08-01 12:34:54 UTC+3",locale":"","eventType":"AUTH_USER_ACCEPT_TERMS"}`
+`{"userId":"aslkdl-asfmfa-asd","sourceIp":"82.102.27.75","unixTime":1534338646,"dtTC":"2018-08-01 12:34:54 UTC+3","dtPN":"2018-08-01 12:34:54 UTC+3","dtLA":"2018-08-01 12:34:54 UTC+3",locale":"","clientValidationFail":true,"eventType":"AUTH_USER_ACCEPT_TERMS"}`
 
 2. AUTH_USER_COMPLETE_VERIFICATION
 
