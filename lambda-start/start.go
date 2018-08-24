@@ -20,8 +20,8 @@ import (
 	"time"
 	"strconv"
 	"github.com/aws/aws-sdk-go/service/firehose"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-lambda-go/lambdacontext"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 )
 
 var anlogger *syslog.Logger
@@ -135,20 +135,29 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
 	fullPhone := strconv.Itoa(reqParam.CountryCallingCode) + reqParam.Phone
+
+	customerId, err := uuid.NewV4()
+	if err != nil {
+		anlogger.Errorf(lc, "start.go : error while generate customerId : %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
+	}
+
 	userInfo := &apimodel.UserInfo{
 		UserId:      userId.String(),
 		SessionId:   sessionId.String(),
 		Phone:       fullPhone,
 		CountryCode: reqParam.CountryCallingCode,
 		PhoneNumber: reqParam.Phone,
+		CustomerId:  customerId.String(),
 	}
 
-	resUserId, resSessionId, wasCreated, ok, errStr := createUserInfo(userInfo, lc)
+	resUserId, resSessionId, resCustomerId, wasCreated, ok, errStr := createUserInfo(userInfo, lc)
 	if !ok {
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
 	resp := apimodel.AuthResp{}
+	resp.CustomerId = resCustomerId
 	if wasCreated {
 		anlogger.Debugf(lc, "start.go : new user was created with userId %s and sessionId %s", resUserId, resSessionId)
 		resp.SessionId = resSessionId
@@ -216,8 +225,8 @@ func updateSessionId(phone, sessionId string, lc *lambdacontext.LambdaContext) (
 	return resSessionId, true, ""
 }
 
-//return userId, sessionId, was user created, was everything ok and error string
-func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext) (string, string, bool, bool, string) {
+//return userId, sessionId,  was user created, was everything ok and error string
+func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext) (userId, sessionId, customerId string, wasCreated, ok bool, errorStr string) {
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
@@ -227,6 +236,7 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 				"#countryCode": aws.String(apimodel.CountryCodeColumnName),
 				"#phoneNumber": aws.String(apimodel.PhoneNumberColumnName),
 				"#time":        aws.String(apimodel.UpdatedTimeColumnName),
+				"#customerId":  aws.String(apimodel.CustomerIdColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":uV": {
@@ -245,6 +255,9 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 				":tV": {
 					S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
 				},
+				":cIdV": {
+					S: aws.String(userInfo.CustomerId),
+				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
 				apimodel.PhoneColumnName: {
@@ -254,7 +267,7 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", apimodel.UserIdColumnName)),
 
 			TableName:        aws.String(userTableName),
-			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV"),
+			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV, #customerId = :cIdV"),
 			ReturnValues:     aws.String("ALL_NEW"),
 		}
 
@@ -264,16 +277,17 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case dynamodb.ErrCodeConditionalCheckFailedException:
-				return "", "", false, true, ""
+				return "", "", "", false, true, ""
 			}
 		}
 		anlogger.Errorf(lc, "start.go : error while creating user : %v", err)
-		return "", "", false, false, apimodel.InternalServerError
+		return "", "", "", false, false, apimodel.InternalServerError
 	}
 
 	resUserId := *res.Attributes[apimodel.UserIdColumnName].S
 	resSessionId := *res.Attributes[apimodel.SessionIdColumnName].S
-	return resUserId, resSessionId, true, true, ""
+	resCustomerId := *res.Attributes[apimodel.CustomerIdColumnName].S
+	return resUserId, resSessionId, resCustomerId, true, true, ""
 }
 
 func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.StartReq, bool) {

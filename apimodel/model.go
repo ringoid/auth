@@ -7,4 +7,5 @@ type UserInfo struct {
 	Phone       string
 	CountryCode int
 	PhoneNumber string
+	CustomerId  string
 }

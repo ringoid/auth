@@ -34,7 +34,8 @@ Body:
     {
         "errorCode":"",
         "errorMessage":"",
-        "sessionId":"sdfsdf-fsdf-fsd"
+        "sessionId":"sdfsdf-fsdf-fsd",
+        "customerId":"ksjdhfha-asff"
     }
     
 Possible errorCodes:

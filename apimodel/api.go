@@ -5,11 +5,12 @@ import "fmt"
 //Request - Response model
 type AuthResp struct {
 	BaseResponse
-	SessionId string `json:"sessionId"`
+	SessionId  string `json:"sessionId"`
+	CustomerId string `json:"customerId"`
 }
 
 func (resp AuthResp) String() string {
-	return fmt.Sprintf("[%v, AuthResp={sessionId=%s}]", resp.BaseResponse, resp.SessionId)
+	return fmt.Sprintf("[%v, AuthResp={sessionId=%s, customerId=%s}]", resp.BaseResponse, resp.SessionId, resp.CustomerId)
 }
 
 type StartReq struct {
