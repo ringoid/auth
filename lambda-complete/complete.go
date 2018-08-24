@@ -32,27 +32,6 @@ var neo4jurl string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 
-const (
-	region     = "eu-west-1"
-	maxRetries = 3
-
-	twilioApiKeyName    = "twilio-api-key"
-	twilioSecretKeyBase = "%s/Twilio/Api/Key"
-
-	sessionGSIName = "sessionGSI"
-
-	phoneColumnName     = "phone"
-	userIdColumnName    = "user_id"
-	sessionIdColumnName = "session_id"
-
-	countryCodeColumnName      = "country_code"
-	phoneNumberColumnName      = "phone_number"
-	tokenUpdatedTimeColumnName = "token_updated_at"
-
-	accessTokenColumnName = "access_token"
-	sexColumnName         = "sex"
-)
-
 func init() {
 	var env string
 	var ok bool
@@ -104,14 +83,14 @@ func init() {
 	anlogger.Debugf("complete.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
-		WithRegion(region).WithMaxRetries(maxRetries).
+		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
 		anlogger.Fatalf("complete.go : error during initialization : %v", err)
 	}
 	anlogger.Debugf("complete.go : aws session was successfully initialized")
 
-	twilioSecretKeyName = fmt.Sprintf(twilioSecretKeyBase, env)
+	twilioSecretKeyName = fmt.Sprintf(apimodel.TwilioSecretKeyBase, env)
 	svc := secretsmanager.New(awsSession)
 	input := &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(twilioSecretKeyName),
@@ -127,7 +106,7 @@ func init() {
 	if err != nil {
 		anlogger.Fatalf("complete.go : error decode %s secret from Secret Manager : %v", twilioSecretKeyName, err)
 	}
-	twilioKey, ok = secretMap[twilioApiKeyName]
+	twilioKey, ok = secretMap[apimodel.TwilioApiKeyName]
 	if !ok {
 		anlogger.Fatalln("complete.go : Twilio Api Key is empty")
 	}
@@ -193,8 +172,8 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 func updateAccessToke(userId, accessToken string) (bool, bool, string) {
 	input := &dynamodb.UpdateItemInput{
 		ExpressionAttributeNames: map[string]*string{
-			"#token":     aws.String(accessTokenColumnName),
-			"#updatedAt": aws.String(tokenUpdatedTimeColumnName),
+			"#token":     aws.String(apimodel.AccessTokenColumnName),
+			"#updatedAt": aws.String(apimodel.TokenUpdatedTimeColumnName),
 		},
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":tV": {
@@ -205,7 +184,7 @@ func updateAccessToke(userId, accessToken string) (bool, bool, string) {
 			},
 		},
 		Key: map[string]*dynamodb.AttributeValue{
-			userIdColumnName: {
+			apimodel.UserIdColumnName: {
 				S: aws.String(userId),
 			},
 		},
@@ -221,7 +200,7 @@ func updateAccessToke(userId, accessToken string) (bool, bool, string) {
 		return false, false, apimodel.InternalServerError
 	}
 
-	_, ok := result.Attributes[sexColumnName]
+	_, ok := result.Attributes[apimodel.SexColumnName]
 
 	anlogger.Infof("complete.go : result from access to gender is %v", ok)
 	return ok, true, ""
@@ -330,7 +309,7 @@ func parseParams(params string) (*apimodel.VerifyReq, bool) {
 func fetchBySessionId(sessionId string) (*apimodel.UserInfo, bool, string) {
 	input := &dynamodb.QueryInput{
 		ExpressionAttributeNames: map[string]*string{
-			"#sessionId": aws.String(sessionIdColumnName),
+			"#sessionId": aws.String(apimodel.SessionIdColumnName),
 		},
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":sV": {
@@ -338,7 +317,7 @@ func fetchBySessionId(sessionId string) (*apimodel.UserInfo, bool, string) {
 			},
 		},
 		KeyConditionExpression: aws.String("#sessionId = :sV"),
-		IndexName:              aws.String(sessionGSIName),
+		IndexName:              aws.String(apimodel.SessionGSIName),
 		TableName:              aws.String(userTableName),
 	}
 
@@ -358,12 +337,12 @@ func fetchBySessionId(sessionId string) (*apimodel.UserInfo, bool, string) {
 		anlogger.Errorf("complete.go : error several userInfo by one sessionId")
 		return &apimodel.UserInfo{}, false, apimodel.InternalServerError
 	}
-	userId := *res.Items[0][userIdColumnName].S
-	sessId := *res.Items[0][sessionIdColumnName].S
-	phone := *res.Items[0][phoneColumnName].S
-	phonenumber := *res.Items[0][phoneNumberColumnName].S
+	userId := *res.Items[0][apimodel.UserIdColumnName].S
+	sessId := *res.Items[0][apimodel.SessionIdColumnName].S
+	phone := *res.Items[0][apimodel.PhoneColumnName].S
+	phonenumber := *res.Items[0][apimodel.PhoneNumberColumnName].S
 
-	countryCode, err := strconv.Atoi(*res.Items[0][countryCodeColumnName].S)
+	countryCode, err := strconv.Atoi(*res.Items[0][apimodel.CountryCodeColumnName].S)
 	if err != nil {
 		anlogger.Errorf("complete.go : error while parsing country code : %v", err)
 		return &apimodel.UserInfo{}, false, apimodel.InternalServerError

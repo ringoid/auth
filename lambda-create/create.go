@@ -26,19 +26,6 @@ var neo4jurl string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 
-const (
-	region     = "eu-west-1"
-	maxRetries = 3
-
-	accessTokenGSIName = "accessTokenGSI"
-
-	userIdColumnName      = "user_id"
-	accessTokenColumnName = "access_token"
-	sexColumnName         = "sex"
-	yearOfBirthColumnName = "year_of_birth"
-	profileCreatedAt      = "profile_created_at"
-)
-
 func init() {
 	var env string
 	var ok bool
@@ -82,7 +69,7 @@ func init() {
 	anlogger.Debugf("create.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
-		WithRegion(region).WithMaxRetries(maxRetries).
+		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
 		anlogger.Fatalf("create.go : error during initialization : %v", err)
@@ -196,7 +183,7 @@ func findUserId(accessToken string) (string, bool, string) {
 
 	input := &dynamodb.QueryInput{
 		ExpressionAttributeNames: map[string]*string{
-			"#token": aws.String(accessTokenColumnName),
+			"#token": aws.String(apimodel.AccessTokenColumnName),
 		},
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":tV": {
@@ -205,7 +192,7 @@ func findUserId(accessToken string) (string, bool, string) {
 		},
 		KeyConditionExpression: aws.String("#token = :tV"),
 		TableName:              aws.String(userProfileTable),
-		IndexName:              aws.String(accessTokenGSIName),
+		IndexName:              aws.String(apimodel.AccessTokenGSIName),
 	}
 
 	result, err := awsDbClient.Query(input)
@@ -224,7 +211,7 @@ func findUserId(accessToken string) (string, bool, string) {
 		return "", false, apimodel.InternalServerError
 	}
 
-	userId := *result.Items[0][userIdColumnName].S
+	userId := *result.Items[0][apimodel.UserIdColumnName].S
 	anlogger.Debugf("create.go : successfully fetched userId [%s] by accessToken [%s]", userId, accessToken)
 
 	return userId, true, ""
@@ -236,9 +223,9 @@ func createUserProfileDynamo(userId string, req *apimodel.CreateReq) (bool, stri
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
-				"#sex":     aws.String(sexColumnName),
-				"#year":    aws.String(yearOfBirthColumnName),
-				"#created": aws.String(profileCreatedAt),
+				"#sex":     aws.String(apimodel.SexColumnName),
+				"#year":    aws.String(apimodel.YearOfBirthColumnName),
+				"#created": aws.String(apimodel.ProfileCreatedAt),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":sV": {
@@ -252,11 +239,11 @@ func createUserProfileDynamo(userId string, req *apimodel.CreateReq) (bool, stri
 				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
-				userIdColumnName: {
+				apimodel.UserIdColumnName: {
 					S: aws.String(userId),
 				},
 			},
-			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", sexColumnName)),
+			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", apimodel.SexColumnName)),
 
 			TableName:        aws.String(userProfileTable),
 			UpdateExpression: aws.String("SET #sex = :sV, #year = :yV, #created = :cV"),

@@ -30,22 +30,6 @@ var userTableName string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 
-const (
-	region     = "eu-west-1"
-	maxRetries = 3
-
-	twilioApiKeyName    = "twilio-api-key"
-	twilioSecretKeyBase = "%s/Twilio/Api/Key"
-
-	phoneColumnName     = "phone"
-	userIdColumnName    = "user_id"
-	sessionIdColumnName = "session_id"
-
-	countryCodeColumnName = "country_code"
-	phoneNumberColumnName = "phone_number"
-	updatedTimeColumnName = "updated_at"
-)
-
 func init() {
 	var env string
 	var ok bool
@@ -83,14 +67,14 @@ func init() {
 	anlogger.Debugf("start.go : start with USER_TABLE = [%s]", userTableName)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
-		WithRegion(region).WithMaxRetries(maxRetries).
+		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
 		anlogger.Fatalf("start.go : error during initialization : %v", err)
 	}
 	anlogger.Debugf("start.go : aws session was successfully initialized")
 
-	twilioSecretKeyName = fmt.Sprintf(twilioSecretKeyBase, env)
+	twilioSecretKeyName = fmt.Sprintf(apimodel.TwilioSecretKeyBase, env)
 	svc := secretsmanager.New(awsSession)
 	input := &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(twilioSecretKeyName),
@@ -106,7 +90,7 @@ func init() {
 	if err != nil {
 		anlogger.Fatalf("start.go : error decode [%s] secret from Secret Manager : %v", twilioSecretKeyName, err)
 	}
-	twilioKey, ok = secretMap[twilioApiKeyName]
+	twilioKey, ok = secretMap[apimodel.TwilioApiKeyName]
 	if !ok {
 		anlogger.Fatalln("start.go : Twilio Api Key is empty")
 	}
@@ -198,8 +182,8 @@ func updateSessionId(phone, sessionId string) (string, bool, string) {
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
-				"#sessionId": aws.String(sessionIdColumnName),
-				"#time":      aws.String(updatedTimeColumnName),
+				"#sessionId": aws.String(apimodel.SessionIdColumnName),
+				"#time":      aws.String(apimodel.UpdatedTimeColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":sV": {
@@ -210,7 +194,7 @@ func updateSessionId(phone, sessionId string) (string, bool, string) {
 				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
-				phoneColumnName: {
+				apimodel.PhoneColumnName: {
 					S: aws.String(phone),
 				},
 			},
@@ -225,7 +209,7 @@ func updateSessionId(phone, sessionId string) (string, bool, string) {
 		return "", false, apimodel.InternalServerError
 	}
 
-	resSessionId := *res.Attributes[sessionIdColumnName].S
+	resSessionId := *res.Attributes[apimodel.SessionIdColumnName].S
 	return resSessionId, true, ""
 }
 
@@ -234,12 +218,12 @@ func createUserInfo(userInfo *apimodel.UserInfo) (string, string, bool, bool, st
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
-				"#userId":    aws.String(userIdColumnName),
-				"#sessionId": aws.String(sessionIdColumnName),
+				"#userId":    aws.String(apimodel.UserIdColumnName),
+				"#sessionId": aws.String(apimodel.SessionIdColumnName),
 
-				"#countryCode": aws.String(countryCodeColumnName),
-				"#phoneNumber": aws.String(phoneNumberColumnName),
-				"#time":        aws.String(updatedTimeColumnName),
+				"#countryCode": aws.String(apimodel.CountryCodeColumnName),
+				"#phoneNumber": aws.String(apimodel.PhoneNumberColumnName),
+				"#time":        aws.String(apimodel.UpdatedTimeColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":uV": {
@@ -260,11 +244,11 @@ func createUserInfo(userInfo *apimodel.UserInfo) (string, string, bool, bool, st
 				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
-				phoneColumnName: {
+				apimodel.PhoneColumnName: {
 					S: aws.String(userInfo.Phone),
 				},
 			},
-			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", userIdColumnName)),
+			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", apimodel.UserIdColumnName)),
 
 			TableName:        aws.String(userTableName),
 			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV"),
@@ -284,8 +268,8 @@ func createUserInfo(userInfo *apimodel.UserInfo) (string, string, bool, bool, st
 		return "", "", false, false, apimodel.InternalServerError
 	}
 
-	resUserId := *res.Attributes[userIdColumnName].S
-	resSessionId := *res.Attributes[sessionIdColumnName].S
+	resUserId := *res.Attributes[apimodel.UserIdColumnName].S
+	resSessionId := *res.Attributes[apimodel.SessionIdColumnName].S
 	return resUserId, resSessionId, true, true, ""
 }
 
