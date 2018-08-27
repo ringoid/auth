@@ -41,6 +41,22 @@ Mappings:
       rcucrt: should-be-prod-value
       rcumin: should-be-prod-value
 
+  UserSettingsTableCUMap:
+    stage:
+      wcumax: 1
+      wcucrt: 1
+      wcumin: 1
+      rcumax: 1
+      rcucrt: 1
+      rcumin: 1
+    prod:
+      wcumax: should-be-prod-value
+      wcucrt: should-be-prod-value
+      wcumin: should-be-prod-value
+      rcumax: should-be-prod-value
+      rcucrt: should-be-prod-value
+      rcumin: should-be-prod-value
+
 
 Parameters:
   Env:
@@ -65,6 +81,7 @@ Globals:
                 !Join [ "-", [ !Ref Env, DeliveryStreamExportName] ]
             USER_TABLE: !Ref UserTable
             USER_PROFILE_TABLE: !Ref UserProfileTable
+            USER_SETTINGS_TABLE: !Ref UserSettingsTable
             NEO4J_URL:
               Fn::ImportValue:
                 !Join [ "-", [ !Ref Env, Neo4jLoadBalancerUrlExport] ]
@@ -162,6 +179,42 @@ Resources:
           Properties:
             Path: /create_profile
             Method: post
+
+  UpdateSettingsAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Join [ "-", [ !Ref Env, update-settings-auth] ]
+      Handler: update_settings
+      CodeUri: ./update-settings-auth.zip
+      Description: Update user's settings function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - AmazonKinesisFirehoseFullAccess
+
+      Events:
+        CompleteEvent:
+          Type: Api
+          Properties:
+            Path: /update_settings
+            Method: post
+
+  GetSettingsAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Join [ "-", [ !Ref Env, get-settings-auth] ]
+      Handler: get_settings
+      CodeUri: ./get-settings-auth.zip
+      Description: Get user's settings function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - AmazonKinesisFirehoseFullAccess
+
+      Events:
+        CompleteEvent:
+          Type: Api
+          Properties:
+            Path: /get_settings
+            Method: get
 
   InternalGetUserIdFunction:
     Type: AWS::Serverless::Function
@@ -591,6 +644,93 @@ Resources:
         ScaleOutCooldown: 60
         PredefinedMetricSpecification:
           PredefinedMetricType: DynamoDBReadCapacityUtilization
+
+  UserSettingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+          TableName: !Join [ "-", [ !Ref Env, Auth, UserSettings] ]
+          AttributeDefinitions:
+            -
+              AttributeName: user_id
+              AttributeType: S
+          KeySchema:
+            -
+              AttributeName: user_id
+              KeyType: HASH
+
+          ProvisionedThroughput:
+            ReadCapacityUnits: !FindInMap [UserSettingsTableCUMap, !Ref Env, rcucrt]
+            WriteCapacityUnits: !FindInMap [UserSettingsTableCUMap, !Ref Env, wcucrt]
+          Tags:
+            - Key: Company
+              Value: Ringoid
+            - Key: Service
+              Value: auth
+            - Key: Environment
+              Value: !Ref Env
+
+  UserSettingsTableWriteCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: UserSettingsTable
+    Properties:
+      MaxCapacity: !FindInMap [UserSettingsTableCUMap, !Ref Env, wcumax]
+      MinCapacity: !FindInMap [UserSettingsTableCUMap, !Ref Env, wcumin]
+      ResourceId: !Join
+        - /
+        - - table
+          - !Join [ "-", [ !Ref Env, Auth, UserSettings] ]
+      RoleARN: !GetAtt
+        - ScalingRole
+        - Arn
+      ScalableDimension: "dynamodb:table:WriteCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  UserSettingsTableReadCapacityScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: UserSettingsTable
+    Properties:
+      MaxCapacity: !FindInMap [UserSettingsTableCUMap, !Ref Env, rcumax]
+      MinCapacity: !FindInMap [UserSettingsTableCUMap, !Ref Env, rcumin]
+      ResourceId: !Join
+        - /
+        - - table
+          - !Join [ "-", [ !Ref Env, Auth, UserSettings] ]
+      RoleARN: !GetAtt
+        - ScalingRole
+        - Arn
+      ScalableDimension: "dynamodb:table:ReadCapacityUnits"
+      ServiceNamespace: dynamodb
+
+  UserSettingsTableWriteScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: UserSettingsTable
+    Properties:
+      PolicyName: WriteAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: UserSettingsTableWriteCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+
+  UserSettingsTableReadScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: UserSettingsTable
+    Properties:
+      PolicyName: ReadAutoScalingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: UserSettingsTableReadCapacityScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
+
 
 Outputs:
 

@@ -171,7 +171,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 			userInfo.Phone, resp.SessionId)
 	}
 	//send analytics event
-	event := apimodel.NewUserAcceptTermsEvent(*reqParam, sourceIp, resUserId)
+	event := apimodel.NewUserAcceptTermsEvent(reqParam, sourceIp, resUserId)
 	apimodel.SendAnalyticEvent(event, resUserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	//send sms

@@ -116,6 +116,70 @@ Possible errorCodes:
 * WrongRequestParamsClientError
 * InvalidAccessTokenClientError
 
+### Update user's settings
+
+* url ``https://{API ENDPOINT}/Prod/update_settings``
+
+POST request
+
+Headers:
+
+* Content-Type : application/json
+
+Body:
+
+    {
+        "accessToken":"adasdasd-fadfs-sdffd",
+        "whoCanSeePhoto":"OPPOSITE", // possible values OPPOSITE/INCOGNITO/ONLY_ME
+        "safeDistanceInMeter":0,
+        "pushMessages":true,
+        "pushMatches":true,
+        "pushLikes":"EVERY" //possible values EVERY/10_NEW/100_NEW 
+    }
+    
+    all parameters are required
+    
+ Response Body:
+ 
+    {
+        "errorCode":"",
+        "errorMessage":""
+    }
+    
+Possible errorCodes:
+
+* InternalServerError
+* WrongRequestParamsClientError
+* InvalidAccessTokenClientError
+
+### Get user's settings
+
+* url ``https://{API ENDPOINT}/Prod/get_settings?accessToken={ACCESS TOKEN}``
+
+GET request
+
+Headers:
+
+* Content-Type : application/json
+
+ Response Body:
+ 
+    {
+        "errorCode":"",
+        "errorMessage":"",
+        "whoCanSeePhoto":"OPPOSITE", 
+        "safeDistanceInMeter":0,
+        "pushMessages":true,
+        "pushMatches":true,
+        "pushLikes":"EVERY"
+    }
+    
+Possible errorCodes:
+
+* InternalServerError
+* WrongRequestParamsClientError
+* InvalidAccessTokenClientError
+
 ## Analytics Events
 
 1. AUTH_USER_ACCEPT_TERMS
@@ -149,3 +213,16 @@ Possible errorCodes:
 * eventType - string (AUTH_USER_PROFILE_CREATED)
 
 `{"userId":"aslkdl-asfmfa-asd","sex":"male","yearOfBirth":"1982","unixTime":1534338646,"eventType":"AUTH_USER_PROFILE_CREATED"}`
+
+4. AUTH_USER_SETTINGS_UPDATED
+
+* userId - string
+* whoCanSeePhoto  - string
+* safeDistanceInMeter - int
+* pushMessages - bool
+* pushMatches - bool
+* pushLikes - string
+* unixTime - int
+* eventType - string (AUTH_USER_SETTINGS_UPDATED)
+
+`{"userId":"aslkdl-asfmfa-asd","whoCanSeePhoto":"OPPOSITE","safeDistanceInMeter":0,"pushMessages":true,"pushMatches":true,"pushLikes":"EVERY","unixTime":1534338646,"eventType":"AUTH_USER_SETTINGS_UPDATED"}`

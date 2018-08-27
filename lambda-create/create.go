@@ -22,6 +22,7 @@ import (
 var anlogger *syslog.Logger
 var awsDbClient *dynamodb.DynamoDB
 var userProfileTable string
+var userSettingsTable string
 var neo4jurl string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
@@ -67,6 +68,13 @@ func init() {
 		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "create.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
+
+	userSettingsTable, ok = os.LookupEnv("USER_SETTINGS_TABLE")
+	if !ok {
+		fmt.Printf("create.go : env can not be empty USER_SETTINGS_TABLE")
+		os.Exit(1)
+	}
+	anlogger.Debugf(nil, "create.go : start with USER_SETTINGS_TABLE = [%s]", userSettingsTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
 		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
@@ -115,8 +123,18 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	event := apimodel.NewUserProfileCreatedEvent(userId, *reqParam)
+	userSettings := apimodel.NewDefaultSettings(userId, reqParam.Sex)
+
+	ok, errStr = createUserSettingsIntoDynamo(userSettings, lc)
+	if !ok {
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+	}
+
+	event := apimodel.NewUserProfileCreatedEvent(userId, reqParam)
 	apimodel.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+
+	settingsEvent := apimodel.NewUserSettingsUpdatedEvent(userSettings)
+	apimodel.SendAnalyticEvent(settingsEvent, userSettings.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	resp := apimodel.BaseResponse{}
 	body, err := json.Marshal(resp)
@@ -197,6 +215,63 @@ func createUserProfileDynamo(userId string, req *apimodel.CreateReq, lc *lambdac
 	}
 
 	anlogger.Debugf(lc, "create.go : successfully create user profile in Dynamo for userId [%s] and req %v", userId, req)
+	return true, ""
+}
+
+//return ok and error string
+func createUserSettingsIntoDynamo(settings *apimodel.UserSettings, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "create.go : start create user settings in Dynamo for userId [%s]", settings.UserId)
+	input :=
+		&dynamodb.UpdateItemInput{
+			ExpressionAttributeNames: map[string]*string{
+				"#whoCanSeePhoto":      aws.String(apimodel.WhoCanSeePhotoColumnName),
+				"#safeDistanceInMeter": aws.String(apimodel.SafeDistanceInMeterColumnName),
+				"#pushMessages":        aws.String(apimodel.PushMessagesColumnName),
+				"#pushMatches":         aws.String(apimodel.PushMatchesColumnName),
+				"#pushLikes":           aws.String(apimodel.PushLikesColumnName),
+			},
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":whoCanSeePhotoV": {
+					S: aws.String(settings.WhoCanSeePhoto),
+				},
+				":safeDistanceInMeterV": {
+					N: aws.String(strconv.Itoa(settings.SafeDistanceInMeter)),
+				},
+				":pushMessagesV": {
+					BOOL: aws.Bool(settings.PushMessages),
+				},
+				":pushMatchesV": {
+					BOOL: aws.Bool(settings.PushMatches),
+				},
+				":pushLikesV": {
+					S: aws.String(settings.PushLikes),
+				},
+			},
+			Key: map[string]*dynamodb.AttributeValue{
+				apimodel.UserIdColumnName: {
+					S: aws.String(settings.UserId),
+				},
+			},
+			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", apimodel.UserIdColumnName)),
+
+			TableName:        aws.String(userSettingsTable),
+			UpdateExpression: aws.String("SET #whoCanSeePhoto = :whoCanSeePhotoV, #safeDistanceInMeter = :safeDistanceInMeterV, #pushMessages = :pushMessagesV, #pushMatches = :pushMatchesV, #pushLikes = :pushLikesV"),
+		}
+
+	_, err := awsDbClient.UpdateItem(input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case dynamodb.ErrCodeConditionalCheckFailedException:
+				anlogger.Warnf(lc, "start.go : warning, settings for userId [%s] already exist", settings.UserId)
+				return true, ""
+			}
+		}
+		anlogger.Errorf(lc, "start.go : error while creating settings for userId [%s] : %v", settings.UserId, err)
+		return false, apimodel.InternalServerError
+	}
+
+	anlogger.Debugf(lc, "create.go : successfully create user settings in Dynamo for userId [%s]", settings.UserId)
 	return true, ""
 }
 

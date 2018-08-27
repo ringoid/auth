@@ -31,6 +31,12 @@ const (
 
 	UpdatedTimeColumnName = "updated_at"
 
+	WhoCanSeePhotoColumnName      = "who_can_see_photo"
+	SafeDistanceInMeterColumnName = "safe_distance_in_meter"
+	PushMessagesColumnName        = "push_messages"
+	PushMatchesColumnName         = "push_matches"
+	PushLikesColumnName           = "push_likes"
+
 	InternalServerError           = `{"errorCode":"InternalServerError","errorMessage":"Internal Server Error"}`
 	WrongRequestParamsClientError = `{"errorCode":"WrongParamsClientError","errorMessage":"Wrong request params"}`
 	PhoneNumberClientError        = `{"errorCode":"PhoneNumberClientError","errorMessage":"Phone number is invalid"}`

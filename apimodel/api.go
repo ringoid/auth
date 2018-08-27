@@ -20,9 +20,9 @@ type StartReq struct {
 	Phone                      string `json:"phone"`
 	ClientValidationFail       bool   `json:"clientValidationFail"`
 	Locale                     string `json:"locale"`
-	DateTimeTermsAndConditions int64 `json:"dtTC"`
-	DateTimePrivacyNotes       int64 `json:"dtPN"`
-	DateTimeLegalAge           int64 `json:"dtLA"`
+	DateTimeTermsAndConditions int64  `json:"dtTC"`
+	DateTimePrivacyNotes       int64  `json:"dtPN"`
+	DateTimeLegalAge           int64  `json:"dtLA"`
 }
 
 func (req StartReq) String() string {
@@ -74,4 +74,30 @@ type InternalGetUserIdResp struct {
 
 func (resp InternalGetUserIdResp) String() string {
 	return fmt.Sprintf("[InternalGetUserIdResp={error=%s, userId=%s}]", resp.Error, resp.UserId)
+}
+
+type UpdateSettingsReq struct {
+	AccessToken         string `json:"accessToken"`
+	WhoCanSeePhoto      string `json:"whoCanSeePhoto"`      //OPPOSITE (default) || INCOGNITO || ONLY_ME
+	SafeDistanceInMeter int    `json:"safeDistanceInMeter"` // 0 (default for men) || 10 (default for women)
+	PushMessages        bool   `json:"pushMessages"`        // true (default for men) || false (default for women)
+	PushMatches         bool   `json:"pushMatches"`         // true (default)
+	PushLikes           string `json:"pushLikes"`           //EVERY (default for men) || 10_NEW (default for women) || 100_NEW
+}
+
+func (req UpdateSettingsReq) String() string {
+	return fmt.Sprintf("[UpdateSettingsReq={accessToken=%s, whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%s}]", req.AccessToken, req.WhoCanSeePhoto, req.SafeDistanceInMeter, req.PushMessages, req.PushMatches, req.PushLikes)
+}
+
+type GetSettingsResp struct {
+	BaseResponse
+	WhoCanSeePhoto      string `json:"whoCanSeePhoto"`      //OPPOSITE (default) || INCOGNITO || ONLY_ME
+	SafeDistanceInMeter int    `json:"safeDistanceInMeter"` // 0 (default for men) || 10 (default for women)
+	PushMessages        bool   `json:"pushMessages"`        // true (default for men) || false (default for women)
+	PushMatches         bool   `json:"pushMatches"`         // true (default)
+	PushLikes           string `json:"pushLikes"`           //EVERY (default for men) || 10_NEW (default for women) || 100_NEW
+}
+
+func (resp GetSettingsResp) String() string {
+	return fmt.Sprintf("[GetSettingsResp={whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%s}]", resp.WhoCanSeePhoto, resp.SafeDistanceInMeter, resp.PushMessages, resp.PushMatches, resp.PushLikes)
 }

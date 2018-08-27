@@ -9,6 +9,10 @@ build:
 	GOOS=linux go build lambda-create/create.go
 	@echo '--- Building internal-get-user-id-auth function ---'
 	GOOS=linux go build lambda-internal-getuserid/internal_get_user_id.go
+	@echo '--- Building update-settings-auth function ---'
+	GOOS=linux go build lambda-update-settings/update_settings.go
+	@echo '--- Building get-settings-auth function ---'
+	GOOS=linux go build lambda-get-settings/get_settings.go
 
 zip_lambda: build
 	@echo '--- Zip start-auth function ---'
@@ -19,6 +23,10 @@ zip_lambda: build
 	zip create-auth.zip ./create
 	@echo '--- Zip internal-getuserid-auth function ---'
 	zip internal-getuserid-auth.zip ./internal_get_user_id
+	@echo '--- Zip update-settings-auth function ---'
+	zip update-settings-auth.zip ./update_settings
+	@echo '--- Zip get-settings-auth function ---'
+	zip get-settings-auth.zip ./get_settings
 
 stage-deploy: zip_lambda
 	@echo '--- Build lambda stage ---'
@@ -38,4 +46,8 @@ clean:
 	rm -rf create
 	rm -rf internal_get_user_id
 	rm -rf internal-getuserid-auth.zip
+	rm -rf update-settings-auth.zip
+	rm -rf update_settings
+	rm -rf get-settings-auth.zip
+	rm -rf get_settings
 
