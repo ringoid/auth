@@ -36,6 +36,9 @@ const (
 	PushMessagesColumnName        = "push_messages"
 	PushMatchesColumnName         = "push_matches"
 	PushLikesColumnName           = "push_likes"
+	InAppMessagesColumnName       = "in_app_messages"
+	InAppMatchesColumnName        = "in_app_matches"
+	InAppLikesColumnName          = "in_app_likes"
 
 	InternalServerError           = `{"errorCode":"InternalServerError","errorMessage":"Internal Server Error"}`
 	WrongRequestParamsClientError = `{"errorCode":"WrongParamsClientError","errorMessage":"Wrong request params"}`

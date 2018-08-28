@@ -120,7 +120,11 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		PushMessages:        settings.PushMessages,
 		PushMatches:         settings.PushMatches,
 		PushLikes:           settings.PushLikes,
+		InAppMessages:       settings.InAppMessages,
+		InAppMatches:        settings.InAppMatches,
+		InAppLikes:          settings.InAppLikes,
 	}
+
 	body, err := json.Marshal(resp)
 	if err != nil {
 		anlogger.Errorf(lc, "get_settings.go.go : error while marshaling resp object for userId [%s] : %v", userId, err)
@@ -166,6 +170,9 @@ func getUserSettings(userId string, lc *lambdacontext.LambdaContext) (*apimodel.
 		PushMessages:        *result.Item[apimodel.PushMessagesColumnName].BOOL,
 		PushMatches:         *result.Item[apimodel.PushMatchesColumnName].BOOL,
 		PushLikes:           *result.Item[apimodel.PushLikesColumnName].S,
+		InAppMessages:       *result.Item[apimodel.InAppMessagesColumnName].BOOL,
+		InAppMatches:        *result.Item[apimodel.InAppMatchesColumnName].BOOL,
+		InAppLikes:          *result.Item[apimodel.InAppLikesColumnName].S,
 	}
 	anlogger.Debugf(lc, "get_settings.go : successfully return user setting for userId  [%s], setting=%v", userId, userSettings)
 	return userSettings, true, ""

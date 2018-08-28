@@ -134,7 +134,7 @@ Body:
         "safeDistanceInMeter":0,
         "pushMessages":true,
         "pushMatches":true,
-        "pushLikes":"EVERY" //possible values EVERY/10_NEW/100_NEW 
+        "pushLikes":"EVERY" //possible values NONE/EVERY/10_NEW/100_NEW 
     }
     
     all parameters are required
@@ -222,7 +222,10 @@ Possible errorCodes:
 * pushMessages - bool
 * pushMatches - bool
 * pushLikes - string
+* inAppMessages - bool
+* inAppMatches - bool
+* inAppLikes - string
 * unixTime - int
 * eventType - string (AUTH_USER_SETTINGS_UPDATED)
 
-`{"userId":"aslkdl-asfmfa-asd","whoCanSeePhoto":"OPPOSITE","safeDistanceInMeter":0,"pushMessages":true,"pushMatches":true,"pushLikes":"EVERY","unixTime":1534338646,"eventType":"AUTH_USER_SETTINGS_UPDATED"}`
+`{"userId":"aslkdl-asfmfa-asd","whoCanSeePhoto":"OPPOSITE","safeDistanceInMeter":0,"pushMessages":true,"pushMatches":true,"pushLikes":"EVERY","unixTime":1534338646,"inAppMessages":true, "inAppMatches":true, "inAppLikes":"EVERY", "eventType":"AUTH_USER_SETTINGS_UPDATED"}`

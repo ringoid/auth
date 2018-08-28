@@ -152,8 +152,13 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Upda
 		return nil, false, apimodel.WrongRequestParamsClientError
 	}
 
-	if req.PushLikes != "EVERY" && req.PushLikes != "10_NEW" && req.PushLikes != "100_NEW" {
+	if req.PushLikes != "NONE" && req.PushLikes != "EVERY" && req.PushLikes != "10_NEW" && req.PushLikes != "100_NEW" {
 		anlogger.Errorf(lc, "update_settings.go : wrong pushLikes [%s] request param, req %v", req.PushLikes, req)
+		return nil, false, apimodel.WrongRequestParamsClientError
+	}
+
+	if req.InAppLikes != "NONE" && req.InAppLikes != "EVERY" && req.InAppLikes != "10_NEW" && req.InAppLikes != "100_NEW" {
+		anlogger.Errorf(lc, "update_settings.go : wrong inAppLikes [%s] request param, req %v", req.InAppLikes, req)
 		return nil, false, apimodel.WrongRequestParamsClientError
 	}
 
@@ -172,6 +177,9 @@ func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.Lambd
 				"#pushMessages":        aws.String(apimodel.PushMessagesColumnName),
 				"#pushMatches":         aws.String(apimodel.PushMatchesColumnName),
 				"#pushLikes":           aws.String(apimodel.PushLikesColumnName),
+				"#inAppMessages":       aws.String(apimodel.InAppMessagesColumnName),
+				"#inAppMatches":        aws.String(apimodel.InAppMatchesColumnName),
+				"#inAppLikes":          aws.String(apimodel.InAppLikesColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":whoCanSeePhotoV": {
@@ -189,6 +197,15 @@ func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.Lambd
 				":pushLikesV": {
 					S: aws.String(settings.PushLikes),
 				},
+				":inAppMessagesV": {
+					BOOL: aws.Bool(settings.InAppMessages),
+				},
+				":inAppMatchesV": {
+					BOOL: aws.Bool(settings.InAppMatches),
+				},
+				":inAppLikesV": {
+					S: aws.String(settings.InAppLikes),
+				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
 				apimodel.UserIdColumnName: {
@@ -197,7 +214,7 @@ func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.Lambd
 			},
 
 			TableName:        aws.String(userSettingsTable),
-			UpdateExpression: aws.String("SET #whoCanSeePhoto = :whoCanSeePhotoV, #safeDistanceInMeter = :safeDistanceInMeterV, #pushMessages = :pushMessagesV, #pushMatches = :pushMatchesV, #pushLikes = :pushLikesV"),
+			UpdateExpression: aws.String("SET #whoCanSeePhoto = :whoCanSeePhotoV, #safeDistanceInMeter = :safeDistanceInMeterV, #pushMessages = :pushMessagesV, #pushMatches = :pushMatchesV, #pushLikes = :pushLikesV, #inAppMessages = :inAppMessagesV, #inAppMatches = :inAppMatchesV, #inAppLikes = :inAppLikesV"),
 		}
 
 	_, err := awsDbClient.UpdateItem(input)

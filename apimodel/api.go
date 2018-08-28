@@ -82,11 +82,15 @@ type UpdateSettingsReq struct {
 	SafeDistanceInMeter int    `json:"safeDistanceInMeter"` // 0 (default for men) || 10 (default for women)
 	PushMessages        bool   `json:"pushMessages"`        // true (default for men) || false (default for women)
 	PushMatches         bool   `json:"pushMatches"`         // true (default)
-	PushLikes           string `json:"pushLikes"`           //EVERY (default for men) || 10_NEW (default for women) || 100_NEW
+	PushLikes           string `json:"pushLikes"`           //EVERY (default for men) || 10_NEW (default for women) || 100_NEW || NONE
+	InAppMessages       bool   `json:"inAppMessages"`       //true (default for everybody)
+	InAppMatches        bool   `json:"inAppMatches"`        //true (default for everybody)
+	InAppLikes          string `json:"inAppLikes"`          //EVERY (default for everybody) || 10_NEW (default for women) || 100_NEW || NONE
 }
 
 func (req UpdateSettingsReq) String() string {
-	return fmt.Sprintf("[UpdateSettingsReq={accessToken=%s, whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%s}]", req.AccessToken, req.WhoCanSeePhoto, req.SafeDistanceInMeter, req.PushMessages, req.PushMatches, req.PushLikes)
+	return fmt.Sprintf("[UpdateSettingsReq={accessToken=%s, whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%s, inAppMessages=%s, inAppMatches=%s, inAppLikes=%s}]",
+		req.AccessToken, req.WhoCanSeePhoto, req.SafeDistanceInMeter, req.PushMessages, req.PushMatches, req.PushLikes, req.InAppMessages, req.InAppMatches, req.InAppLikes)
 }
 
 type GetSettingsResp struct {
@@ -95,9 +99,13 @@ type GetSettingsResp struct {
 	SafeDistanceInMeter int    `json:"safeDistanceInMeter"` // 0 (default for men) || 10 (default for women)
 	PushMessages        bool   `json:"pushMessages"`        // true (default for men) || false (default for women)
 	PushMatches         bool   `json:"pushMatches"`         // true (default)
-	PushLikes           string `json:"pushLikes"`           //EVERY (default for men) || 10_NEW (default for women) || 100_NEW
+	PushLikes           string `json:"pushLikes"`           //EVERY (default for men) || 10_NEW (default for women) || 100_NEW || NONE
+	InAppMessages       bool   `json:"inAppMessages"`       //true (default for everybody)
+	InAppMatches        bool   `json:"inAppMatches"`        //true (default for everybody)
+	InAppLikes          string `json:"inAppLikes"`          //EVERY (default for everybody) || 10_NEW (default for women) || 100_NEW || NONE
 }
 
 func (resp GetSettingsResp) String() string {
-	return fmt.Sprintf("[GetSettingsResp={whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%s}]", resp.WhoCanSeePhoto, resp.SafeDistanceInMeter, resp.PushMessages, resp.PushMatches, resp.PushLikes)
+	return fmt.Sprintf("[GetSettingsResp={whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%s, inAppMessages=%s, inAppMatches=%s, inAppLikes=%s}]",
+		resp.WhoCanSeePhoto, resp.SafeDistanceInMeter, resp.PushMessages, resp.PushMatches, resp.PushLikes, resp.InAppMessages, resp.InAppMatches, resp.InAppLikes)
 }

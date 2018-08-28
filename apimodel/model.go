@@ -17,6 +17,9 @@ type UserSettings struct {
 	PushMessages        bool   // true (default for men) || false (default for women)
 	PushMatches         bool   // true (default)
 	PushLikes           string //EVERY (default for men) || 10_NEW (default for women) || 100_NEW
+	InAppMessages       bool   //true (default for everybody)
+	InAppMatches        bool   //true (default for everybody)
+	InAppLikes          string //EVERY (default for everybody) || 10_NEW (default for women) || 100_NEW || NONE
 }
 
 func NewDefaultSettings(userId, sex string) *UserSettings {
@@ -28,6 +31,9 @@ func NewDefaultSettings(userId, sex string) *UserSettings {
 			PushMessages:        false,
 			PushMatches:         true,
 			PushLikes:           "10_NEW",
+			InAppMessages:       true,
+			InAppMatches:        true,
+			InAppLikes:          "EVERY",
 		}
 	}
 	return &UserSettings{
@@ -37,6 +43,9 @@ func NewDefaultSettings(userId, sex string) *UserSettings {
 		PushMessages:        true,
 		PushMatches:         true,
 		PushLikes:           "EVERY",
+		InAppMessages:       true,
+		InAppMatches:        true,
+		InAppLikes:          "EVERY",
 	}
 }
 
@@ -48,5 +57,8 @@ func NewUserSettings(userId string, req *UpdateSettingsReq) *UserSettings {
 		PushMessages:        req.PushMessages,
 		PushMatches:         req.PushMatches,
 		PushLikes:           req.PushLikes,
+		InAppMessages:       req.InAppMessages,
+		InAppMatches:        req.InAppMatches,
+		InAppLikes:          req.InAppLikes,
 	}
 }
