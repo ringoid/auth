@@ -19,7 +19,7 @@ type UserSettings struct {
 	PushLikes           string //EVERY (default for men) || 10_NEW (default for women) || 100_NEW
 	InAppMessages       bool   //true (default for everybody)
 	InAppMatches        bool   //true (default for everybody)
-	InAppLikes          string //EVERY (default for everybody) || 10_NEW (default for women) || 100_NEW || NONE
+	InAppLikes          string //EVERY (default for everybody) || 10_NEW || 100_NEW || NONE
 }
 
 func NewDefaultSettings(userId, sex string) *UserSettings {

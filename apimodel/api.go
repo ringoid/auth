@@ -85,7 +85,7 @@ type UpdateSettingsReq struct {
 	PushLikes           string `json:"pushLikes"`           //EVERY (default for men) || 10_NEW (default for women) || 100_NEW || NONE
 	InAppMessages       bool   `json:"inAppMessages"`       //true (default for everybody)
 	InAppMatches        bool   `json:"inAppMatches"`        //true (default for everybody)
-	InAppLikes          string `json:"inAppLikes"`          //EVERY (default for everybody) || 10_NEW (default for women) || 100_NEW || NONE
+	InAppLikes          string `json:"inAppLikes"`          //EVERY (default for everybody) || 10_NEW || 100_NEW || NONE
 }
 
 func (req UpdateSettingsReq) String() string {
