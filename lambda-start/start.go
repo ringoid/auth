@@ -118,6 +118,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	reqParam, ok := parseParams(request.Body, lc)
 	if !ok {
+		anlogger.Errorf(lc, "start.go : return %s to client", apimodel.WrongRequestParamsClientError)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.WrongRequestParamsClientError}, nil
 	}
 
@@ -126,12 +127,14 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	userId, err := uuid.NewV4()
 	if err != nil {
 		anlogger.Errorf(lc, "start.go : error while generate userId : %v", err)
+		anlogger.Errorf(lc, "start.go : return %s to client", apimodel.InternalServerError)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
 
 	sessionId, err := uuid.NewV4()
 	if err != nil {
-		anlogger.Errorf(lc, "start.go : error while generate sessionId : %v", err)
+		anlogger.Errorf(lc, "start.go : error while generate sessionId for userId [%s] : %v", userId, err)
+		anlogger.Errorf(lc, "start.go : return %s to client", apimodel.InternalServerError)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
 	fullPhone := strconv.Itoa(reqParam.CountryCallingCode) + reqParam.Phone
@@ -139,6 +142,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	customerId, err := uuid.NewV4()
 	if err != nil {
 		anlogger.Errorf(lc, "start.go : error while generate customerId : %v", err)
+		anlogger.Errorf(lc, "start.go : return %s to client", apimodel.InternalServerError)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
 
@@ -153,21 +157,23 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	resUserId, resSessionId, resCustomerId, wasCreated, ok, errStr := createUserInfo(userInfo, lc)
 	if !ok {
+		anlogger.Errorf(lc, "start.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
 	resp := apimodel.AuthResp{}
 	resp.CustomerId = resCustomerId
 	if wasCreated {
-		anlogger.Debugf(lc, "start.go : new user was created with userId %s and sessionId %s", resUserId, resSessionId)
+		anlogger.Debugf(lc, "start.go : new userId was reserved, userId [%s] and sessionId [%s]", resUserId, resSessionId)
 		resp.SessionId = resSessionId
 	} else {
 		newSessionId, ok, errStr := updateSessionId(userInfo.Phone, userInfo.SessionId, lc)
 		if !ok {
+			anlogger.Errorf(lc, "start.go : return %s to client", errStr)
 			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 		}
 		resp.SessionId = newSessionId
-		anlogger.Debugf(lc, "start.go : user with such phone %s already exist, new sessionId id was generated %s",
+		anlogger.Debugf(lc, "start.go : userId for such phone [%s] was previously reserved, new sessionId [%s] id was generated",
 			userInfo.Phone, resp.SessionId)
 	}
 	//send analytics event
@@ -177,20 +183,25 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	//send sms
 	ok, errorStr := startVerify(reqParam.CountryCallingCode, reqParam.Phone, reqParam.Locale, lc)
 	if !ok {
+		anlogger.Errorf(lc, "start.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
 	}
 
 	body, err := json.Marshal(resp)
 	if err != nil {
 		anlogger.Errorf(lc, "start.go : error while marshaling resp object : %v", err)
+		anlogger.Errorf(lc, "start.go : return %s to client", apimodel.InternalServerError)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
 	//return OK with SessionId
+	anlogger.Debugf(lc, "start.go : return body=%s to the client", string(body))
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
 }
 
 //return updated sessionId, is everything ok and error string
 func updateSessionId(phone, sessionId string, lc *lambdacontext.LambdaContext) (string, bool, string) {
+	anlogger.Debugf(lc, "start.go : update sessionId [%s] for phone [%s]", sessionId, phone)
+
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
@@ -217,16 +228,21 @@ func updateSessionId(phone, sessionId string, lc *lambdacontext.LambdaContext) (
 
 	res, err := awsDbClient.UpdateItem(input)
 	if err != nil {
-		anlogger.Errorf(lc, "start.go : error while update sessionId : %v", err)
+		anlogger.Errorf(lc, "start.go : error while update sessionId [%s] for phone [%s] : %v", sessionId, phone, err)
 		return "", false, apimodel.InternalServerError
 	}
 
 	resSessionId := *res.Attributes[apimodel.SessionIdColumnName].S
+
+	anlogger.Debugf(lc, "start.go : successfully update sessionId [%s] for phone [%s]", resSessionId, phone)
+
 	return resSessionId, true, ""
 }
 
 //return userId, sessionId,  was user created, was everything ok and error string
 func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext) (userId, sessionId, customerId string, wasCreated, ok bool, errorStr string) {
+	anlogger.Debugf(lc, "start.go : reserve userId and customerId, for phone [%s], userInfo=%v", userInfo.Phone, userInfo)
+
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
@@ -277,16 +293,18 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case dynamodb.ErrCodeConditionalCheckFailedException:
+				anlogger.Debugf(lc, "start.go : userId was already reserved for this phone number, phone [%s]", userInfo.Phone)
 				return "", "", "", false, true, ""
 			}
 		}
-		anlogger.Errorf(lc, "start.go : error while creating user : %v", err)
+		anlogger.Errorf(lc, "start.go : error while reserve userId and customerId for phone [%s], userInfo=%v : %v", userInfo.Phone, userInfo, err)
 		return "", "", "", false, false, apimodel.InternalServerError
 	}
 
 	resUserId := *res.Attributes[apimodel.UserIdColumnName].S
 	resSessionId := *res.Attributes[apimodel.SessionIdColumnName].S
 	resCustomerId := *res.Attributes[apimodel.CustomerIdColumnName].S
+	anlogger.Debugf(lc, "start.go : successfully reserve userId [%s] and customerId [%s] for phone [%s]", resUserId, resCustomerId, userInfo.Phone)
 	return resUserId, resSessionId, resCustomerId, true, true, ""
 }
 
@@ -309,6 +327,8 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Star
 }
 
 func startVerify(code int, number, locale string, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "start.go : verify phone with code [%d] and phone [%s]", code, number)
+
 	params := fmt.Sprintf("via=sms&&phone_number=%s&&country_code=%d", number, code)
 	if len(locale) != 0 {
 		params = fmt.Sprintf("via=sms&&phone_number=%s&&country_code=%d&&locale=%s", number, code, locale)
@@ -318,7 +338,7 @@ func startVerify(code int, number, locale string, lc *lambdacontext.LambdaContex
 	req, err := http.NewRequest("POST", url, strings.NewReader(params))
 
 	if err != nil {
-		anlogger.Errorf(lc, "start.go : error while construct the request : %v", err)
+		anlogger.Errorf(lc, "start.go : error while construct the request to verify code [%d] and phone [%s] : %v", code, number, err)
 		return false, apimodel.InternalServerError
 	}
 
@@ -331,17 +351,18 @@ func startVerify(code int, number, locale string, lc *lambdacontext.LambdaContex
 
 	resp, err := client.Do(req)
 	if err != nil {
-		anlogger.Errorf(lc, "start.go error while making request : %v", err)
+		anlogger.Errorf(lc, "start.go error while making request by url %s with params %s : %v", url, params, err)
 		return false, apimodel.InternalServerError
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		anlogger.Errorf(lc, "start.go : error reading response body from Twilio : %v", err)
+		anlogger.Errorf(lc, "start.go : error reading response body from Twilio, code [%d] and phone [%s] : %v", code, number, err)
 		return false, apimodel.InternalServerError
 	}
 
+	anlogger.Debugf(lc, "start.go : receive response from Twilio, body=%s, code [%d] and phone [%s]", string(body), code, number)
 	if resp.StatusCode != 200 {
 		anlogger.Errorf(lc, "start.go : error while sending sms, status %v, body %v",
 			resp.StatusCode, string(body))
@@ -349,12 +370,13 @@ func startVerify(code int, number, locale string, lc *lambdacontext.LambdaContex
 		var errorResp map[string]interface{}
 		err := json.Unmarshal(body, &errorResp)
 		if err != nil {
-			anlogger.Errorf(lc, "start.go : error parsing Twilio response : %v", err)
+			anlogger.Errorf(lc, "start.go : error parsing Twilio response, code [%d] and phone [%s] : %v", code, number, err)
 			return false, apimodel.InternalServerError
 		}
 
 		if errorCodeObject, ok := errorResp["error_code"]; ok {
 			if errorCodeStr, ok := errorCodeObject.(string); ok {
+				anlogger.Errorf(lc, "start.go : Twilio return error_code=%s, code [%d] and phone [%s] : %v", errorCodeStr, code, number, err)
 				switch errorCodeStr {
 				case "60033":
 					return false, apimodel.PhoneNumberClientError
@@ -367,8 +389,8 @@ func startVerify(code int, number, locale string, lc *lambdacontext.LambdaContex
 		return false, apimodel.InternalServerError
 	}
 
-	anlogger.Infof(lc, "start.go : sms was successfully sent, status %v, body %v",
-		resp.StatusCode, string(body))
+	anlogger.Infof(lc, "start.go : sms was successfully sent, status %v, body %v, code [%d] and phone [%s]",
+		resp.StatusCode, string(body), code, number)
 	return true, ""
 }
 

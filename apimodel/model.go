@@ -1,5 +1,7 @@
 package apimodel
 
+import "fmt"
+
 type UserInfo struct {
 	UserId    string
 	SessionId string
@@ -8,6 +10,11 @@ type UserInfo struct {
 	CountryCode int
 	PhoneNumber string
 	CustomerId  string
+}
+
+func (model UserInfo) String() string {
+	return fmt.Sprintf("[UserInfo={userId=%s, sessionId=%s, countryCode=%d, phoneNumber=%s, customerId=%s}]",
+		model.UserId, model.SessionId, model.CountryCode, model.PhoneNumber, model.CustomerId)
 }
 
 type UserSettings struct {
@@ -20,6 +27,11 @@ type UserSettings struct {
 	InAppMessages       bool   //true (default for everybody)
 	InAppMatches        bool   //true (default for everybody)
 	InAppLikes          string //EVERY (default for everybody) || 10_NEW || 100_NEW || NONE
+}
+
+func (model UserSettings) String() string {
+	return fmt.Sprintf("[UserSettings={userId=%s, whoCanSeePhoto=%s, safeDistanceInMeter=%v, pushMessages=%v, pushMatches=%v, pushLikes=%v, inAppMessages=%v, inAppMatches=%v, inAppLikes=%v}]",
+		model.UserId, model.WhoCanSeePhoto, model.SafeDistanceInMeter, model.PushMessages, model.PushMatches, model.PushLikes, model.InAppMessages, model.InAppMatches, model.InAppLikes)
 }
 
 func NewDefaultSettings(userId, sex string) *UserSettings {
@@ -57,8 +69,8 @@ func NewUserSettings(userId string, req *UpdateSettingsReq) *UserSettings {
 		PushMessages:        req.PushMessages,
 		PushMatches:         req.PushMatches,
 		PushLikes:           req.PushLikes,
-		InAppMessages:       req.InAppMessages,
-		InAppMatches:        req.InAppMatches,
-		InAppLikes:          req.InAppLikes,
+		InAppMessages:       true,
+		InAppMatches:        true,
+		InAppLikes:          "EVERY",
 	}
 }

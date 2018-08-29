@@ -1,6 +1,9 @@
 package apimodel
 
-import "time"
+import (
+	"time"
+	"fmt"
+)
 
 type UserAcceptTermsEvent struct {
 	UserId                     string `json:"userId"`
@@ -12,6 +15,11 @@ type UserAcceptTermsEvent struct {
 	DateTimeTermsAndConditions int64  `json:"dtTC"`
 	DateTimePrivacyNotes       int64  `json:"dtPN"`
 	DateTimeLegalAge           int64  `json:"dtLA"`
+}
+
+func (event UserAcceptTermsEvent) String() string {
+	return fmt.Sprintf("[UserAcceptTermsEvent={userId=%s, locale=%s, sourceIp=%s, clientValidationFail=%v, unixTime=%v, dtTC=%v, dtPN=%v, dtLA=%v, eventType=%s}]",
+		event.UserId, event.Locale, event.SourceIp, event.ClientValidationFail, event.UnixTime, event.DateTimeTermsAndConditions, event.DateTimePrivacyNotes, event.DateTimeLegalAge, event.EventType)
 }
 
 func NewUserAcceptTermsEvent(req *StartReq, sourceIp, userId string) *UserAcceptTermsEvent {
@@ -37,6 +45,10 @@ type UserVerificationCompleteEvent struct {
 	EventType string `json:"eventType"`
 }
 
+func (event UserVerificationCompleteEvent) String() string {
+	return fmt.Sprintf("[UserVerificationCompleteEvent={userId=%s, unixTime=%v, eventType=%v}]", event.UserId, event.UnixTime, event.EventType)
+}
+
 func NewUserVerificationCompleteEvent(userId string) *UserVerificationCompleteEvent {
 	return &UserVerificationCompleteEvent{
 		UserId:    userId,
@@ -51,6 +63,11 @@ type UserProfileCreatedEvent struct {
 	YearOfBirth int    `json:"yearOfBirth"`
 	UnixTime    int64  `json:"unixTime"`
 	EventType   string `json:"eventType"`
+}
+
+func (event UserProfileCreatedEvent) String() string {
+	return fmt.Sprintf("[UserProfileCreatedEvent={userId=%s, sex=%s, yearOfBirth=%v, unixTime=%v, eventType=%s}]",
+		event.UserId, event.Sex, event.YearOfBirth, event.UnixTime, event.EventType)
 }
 
 func NewUserProfileCreatedEvent(userId string, req *CreateReq) *UserProfileCreatedEvent {
@@ -75,6 +92,11 @@ type UserSettingsUpdatedEvent struct {
 	InAppLikes          string `json:"inAppLikes"`          //EVERY (default for everybody) || 10_NEW (default for women) || 100_NEW || NONE
 	UnixTime            int64  `json:"unixTime"`
 	EventType           string `json:"eventType"`
+}
+
+func (event UserSettingsUpdatedEvent) String() string {
+	return fmt.Sprintf("[UserSettingsUpdatedEvent={userId=%s, whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%v, inAppMessages=%v, inAppMatches=%v, inAppLikes=%v, unixTime=%v, eventType=%s}]",
+		event.UserId, event.WhoCanSeePhoto, event.SafeDistanceInMeter, event.PushMessages, event.PushMatches, event.PushLikes, event.InAppMessages, event.InAppMatches, event.InAppLikes, event.UnixTime, event.EventType)
 }
 
 func NewUserSettingsUpdatedEvent(settings *UserSettings) *UserSettingsUpdatedEvent {

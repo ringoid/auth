@@ -105,28 +105,32 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	reqParam, ok, errStr := parseParams(request.Body, lc)
 	if !ok {
+		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
 	userId, ok, errStr := apimodel.FindUserId(reqParam.AccessToken, userProfileTable, awsDbClient, anlogger, lc)
 	if !ok {
+		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
 	ok, errStr = createUserProfileNeo4j(userId, reqParam, lc)
 	if !ok {
+		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
 	ok, errStr = createUserProfileDynamo(userId, reqParam, lc)
 	if !ok {
+		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
 	userSettings := apimodel.NewDefaultSettings(userId, reqParam.Sex)
-
 	ok, errStr = createUserSettingsIntoDynamo(userSettings, lc)
 	if !ok {
+		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
@@ -140,15 +144,15 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	body, err := json.Marshal(resp)
 	if err != nil {
 		anlogger.Errorf(lc, "create.go : error while marshaling resp object for userId [%s] : %v", userId, err)
+		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, apimodel.InternalServerError)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
-	anlogger.Debugf(lc, "create.go : return body resp [%s] for userId [%s]", string(body), userId)
-	//return OK with AccessToken
+	anlogger.Debugf(lc, "create.go : return successful resp [%s] for userId [%s]", string(body), userId)
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
 }
 
 func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.CreateReq, bool, string) {
-	anlogger.Debugf(lc, "create.go : start parsing request body [%s]", params)
+	anlogger.Debugf(lc, "create.go : parse request body %s", params)
 	var req apimodel.CreateReq
 	err := json.Unmarshal([]byte(params), &req)
 	if err != nil {
@@ -165,13 +169,13 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Crea
 		anlogger.Errorf(lc, "create.go : wrong sex [%s] request param, req %v", req.Sex, req)
 		return nil, false, apimodel.WrongSexClientError
 	}
-	anlogger.Debugf(lc, "create.go : successfully parse request string [%s] to [%v]", params, req)
+	anlogger.Debugf(lc, "create.go : successfully parse request string [%s] to %v", params, req)
 	return &req, true, ""
 }
 
 //return ok and error string
 func createUserProfileDynamo(userId string, req *apimodel.CreateReq, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "create.go : start create user profile in Dynamo for userId [%s] and req %v", userId, req)
+	anlogger.Debugf(lc, "create.go : create user profile for userId [%s] and req %v", userId, req)
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
@@ -214,13 +218,13 @@ func createUserProfileDynamo(userId string, req *apimodel.CreateReq, lc *lambdac
 		return false, apimodel.InternalServerError
 	}
 
-	anlogger.Debugf(lc, "create.go : successfully create user profile in Dynamo for userId [%s] and req %v", userId, req)
+	anlogger.Debugf(lc, "create.go : successfully create user profile for userId [%s] and req %v", userId, req)
 	return true, ""
 }
 
 //return ok and error string
 func createUserSettingsIntoDynamo(settings *apimodel.UserSettings, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "create.go : start create user settings in Dynamo for userId [%s]", settings.UserId)
+	anlogger.Debugf(lc, "create.go : create default user settings for userId [%s], settings=%v", settings.UserId, settings)
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
@@ -275,22 +279,22 @@ func createUserSettingsIntoDynamo(settings *apimodel.UserSettings, lc *lambdacon
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case dynamodb.ErrCodeConditionalCheckFailedException:
-				anlogger.Warnf(lc, "start.go : warning, settings for userId [%s] already exist", settings.UserId)
+				anlogger.Warnf(lc, "start.go : warning, default settings for userId [%s] already exist", settings.UserId)
 				return true, ""
 			}
 		}
-		anlogger.Errorf(lc, "start.go : error while creating settings for userId [%s] : %v", settings.UserId, err)
+		anlogger.Errorf(lc, "start.go : error while creating default settings for userId [%s], settings=%v : %v", settings.UserId, settings, err)
 		return false, apimodel.InternalServerError
 	}
 
-	anlogger.Debugf(lc, "create.go : successfully create user settings in Dynamo for userId [%s]", settings.UserId)
+	anlogger.Debugf(lc, "create.go : successfully create user default settings for userId [%s], settings=%v", settings.UserId, settings)
 	return true, ""
 }
 
 //return ok and error string
 func createUserProfileNeo4j(userId string, req *apimodel.CreateReq, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "create.go : start create user profile in Neo4j for userId [%s] and req %v", userId, req)
-	anlogger.Debugf(lc, "create.go : successfully create user profile in Neo4j for userId [%s] and req %v", userId, req)
+	//anlogger.Debugf(lc, "create.go : start create user profile in Neo4j for userId [%s] and req %v", userId, req)
+	//anlogger.Debugf(lc, "create.go : successfully create user profile in Neo4j for userId [%s] and req %v", userId, req)
 	return true, ""
 }
 

@@ -28,7 +28,9 @@ func New(address, tag string) (*Logger, error) {
 		multiWriter = io.MultiWriter(sysLogWriter, os.Stdout)
 	}
 	l := Logger{}
-	l.debug = log.New(os.Stdout, "DEBUG ", log.Ldate|log.Lmicroseconds|log.LUTC)
+	//todo:uncomment
+	//l.debug = log.New(os.Stdout, "DEBUG ", log.Ldate|log.Lmicroseconds|log.LUTC)
+	l.debug = log.New(multiWriter, "DEBUG ", log.Ldate|log.Lmicroseconds|log.LUTC)
 	l.info = log.New(multiWriter, "INFO ", log.Ldate|log.Lmicroseconds|log.LUTC)
 	l.warn = log.New(multiWriter, "WARNING ", log.Ldate|log.Lmicroseconds|log.LUTC)
 	l.error = log.New(multiWriter, "ERROR ", log.Ldate|log.Lmicroseconds|log.LUTC)

@@ -12,7 +12,7 @@ import (
 //return userId, was everything ok, error string in case of error
 func FindUserId(accessToken, userProfileTableName string, awsDbClient *dynamodb.DynamoDB,
 	anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (string, bool, string) {
-	anlogger.Debugf(lc, "common_action.go : start find user by accessToken [%s]", accessToken)
+	anlogger.Debugf(lc, "common_action.go : find user by accessToken [%s]", accessToken)
 
 	if len(accessToken) == 0 {
 		anlogger.Errorf(lc, "common_action.go : empty access token")
@@ -50,14 +50,14 @@ func FindUserId(accessToken, userProfileTableName string, awsDbClient *dynamodb.
 	}
 
 	userId := *result.Items[0][UserIdColumnName].S
-	anlogger.Debugf(lc, "common_action.go : successfully fetched userId [%s] by accessToken [%s]", userId, accessToken)
+	anlogger.Debugf(lc, "common_action.go : successfully found userId [%s] by accessToken [%s]", userId, accessToken)
 
 	return userId, true, ""
 }
 
 func SendAnalyticEvent(event interface{}, userId, deliveryStreamName string, awsDeliveryStreamClient *firehose.Firehose,
 	anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) {
-	anlogger.Debugf(lc, "common_action.go : start sending analytics event [%v] for userId [%s]", event, userId)
+	anlogger.Debugf(lc, "common_action.go : send analytics event [%v] for userId [%s]", event, userId)
 	data, err := json.Marshal(event)
 	if err != nil {
 		anlogger.Errorf(lc, "common_action.go : error marshaling analytics event [%v] for userId [%s] : %v", event, userId, err)

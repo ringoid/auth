@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"github.com/aws/aws-lambda-go/events"
 	"strconv"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-lambda-go/lambdacontext"
 )
 
@@ -104,11 +103,13 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	reqParam, ok, errStr := parseParams(request.Body, lc)
 	if !ok {
+		anlogger.Errorf(lc, "update_settings.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
 	userId, ok, errStr := apimodel.FindUserId(reqParam.AccessToken, userProfileTable, awsDbClient, anlogger, lc)
 	if !ok {
+		anlogger.Errorf(lc, "update_settings.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
@@ -116,6 +117,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	ok, errStr = updateUserSettings(settings, lc)
 	if !ok {
+		anlogger.Errorf(lc, "update_settings.go : userId [%s], return %s to client", userId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
@@ -128,13 +130,13 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		anlogger.Errorf(lc, "update_settings.go : error while marshaling resp object for userId [%s] : %v", userId, err)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
-	anlogger.Debugf(lc, "update_settings.go : return body resp [%s] for userId [%s]", string(body), userId)
+	anlogger.Debugf(lc, "update_settings.go : return body=%s for userId [%s]", string(body), userId)
 	//return OK with AccessToken
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
 }
 
 func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.UpdateSettingsReq, bool, string) {
-	anlogger.Debugf(lc, "update_settings.go : start parsing request body [%s]", params)
+	anlogger.Debugf(lc, "update_settings.go : parse request body [%s]", params)
 	var req apimodel.UpdateSettingsReq
 	err := json.Unmarshal([]byte(params), &req)
 	if err != nil {
@@ -157,18 +159,13 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Upda
 		return nil, false, apimodel.WrongRequestParamsClientError
 	}
 
-	if req.InAppLikes != "NONE" && req.InAppLikes != "EVERY" && req.InAppLikes != "10_NEW" && req.InAppLikes != "100_NEW" {
-		anlogger.Errorf(lc, "update_settings.go : wrong inAppLikes [%s] request param, req %v", req.InAppLikes, req)
-		return nil, false, apimodel.WrongRequestParamsClientError
-	}
-
-	anlogger.Debugf(lc, "update_settings.go : successfully parse request string [%s] to [%v]", params, req)
+	anlogger.Debugf(lc, "update_settings.go : successfully parse request string [%s] to %v", params, req)
 	return &req, true, ""
 }
 
 //return ok and error string
 func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "update_settings.go : start update user settings in Dynamo for userId [%s]", settings.UserId)
+	anlogger.Debugf(lc, "update_settings.go : start update user settings for userId [%s], settings=%v", settings.UserId, settings)
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
@@ -219,18 +216,11 @@ func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.Lambd
 
 	_, err := awsDbClient.UpdateItem(input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case dynamodb.ErrCodeConditionalCheckFailedException:
-				anlogger.Warnf(lc, "start.go : warning, settings for userId [%s] already exist", settings.UserId)
-				return true, ""
-			}
-		}
-		anlogger.Errorf(lc, "start.go : error while update user settings for userId [%s] : %v", settings.UserId, err)
+		anlogger.Errorf(lc, "update_settings.go : error update user settings for userId [%s], settings=%v : %v", settings.UserId, settings, err)
 		return false, apimodel.InternalServerError
 	}
 
-	anlogger.Debugf(lc, "update_settings.go : successfully update user settings in Dynamo for userId [%s]", settings.UserId)
+	anlogger.Debugf(lc, "update_settings.go : successfully update user settings for userId [%s], settings=%v", settings.UserId, settings)
 	return true, ""
 }
 

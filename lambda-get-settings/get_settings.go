@@ -99,18 +99,19 @@ func init() {
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	lc, _ := lambdacontext.FromContext(ctx)
 
-	anlogger.Debugf(lc, "get_settings.go.go : start handle request %v", request)
-	anlogger.Debugf(lc, "get_settings.go.go : query string params %v", request.QueryStringParameters)
+	anlogger.Debugf(lc, "get_settings.go : start handle request %v", request)
 
 	accessToken := request.QueryStringParameters["accessToken"]
 
 	userId, ok, errStr := apimodel.FindUserId(accessToken, userProfileTable, awsDbClient, anlogger, lc)
 	if !ok {
+		anlogger.Errorf(lc, "get_settings.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
 	settings, ok, errStr := getUserSettings(userId, lc)
 	if !ok {
+		anlogger.Errorf(lc, "get_settings.go : userId [%s], return %s to client", userId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
@@ -120,23 +121,20 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		PushMessages:        settings.PushMessages,
 		PushMatches:         settings.PushMatches,
 		PushLikes:           settings.PushLikes,
-		InAppMessages:       settings.InAppMessages,
-		InAppMatches:        settings.InAppMatches,
-		InAppLikes:          settings.InAppLikes,
 	}
 
 	body, err := json.Marshal(resp)
 	if err != nil {
-		anlogger.Errorf(lc, "get_settings.go.go : error while marshaling resp object for userId [%s] : %v", userId, err)
+		anlogger.Errorf(lc, "get_settings.go : error while marshaling resp object for userId [%s], resp=%v : %v", userId, resp, err)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
-	anlogger.Debugf(lc, "get_settings.go.go : return body resp [%s] for userId [%s]", string(body), userId)
+	anlogger.Debugf(lc, "get_settings.go : return body=%s to the client, userId [%s]", string(body), userId)
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
 }
 
 //return userSettings, ok and error string
 func getUserSettings(userId string, lc *lambdacontext.LambdaContext) (*apimodel.UserSettings, bool, string) {
-	anlogger.Debugf(lc, "get_settings.go : start get user settings from Dynamo for userId [%s]", userId)
+	anlogger.Debugf(lc, "get_settings.go : get user settings for userId [%s]", userId)
 	input := &dynamodb.GetItemInput{
 		Key: map[string]*dynamodb.AttributeValue{
 			apimodel.UserIdColumnName: {
@@ -148,7 +146,7 @@ func getUserSettings(userId string, lc *lambdacontext.LambdaContext) (*apimodel.
 
 	result, err := awsDbClient.GetItem(input)
 	if err != nil {
-		anlogger.Errorf(lc, "get_settings.go : error during get user settings for userId [%s] : %v", userId, err)
+		anlogger.Errorf(lc, "get_settings.go : error get user settings for userId [%s] : %v", userId, err)
 		return nil, false, apimodel.InternalServerError
 	}
 
@@ -159,7 +157,7 @@ func getUserSettings(userId string, lc *lambdacontext.LambdaContext) (*apimodel.
 
 	safeD, err := strconv.Atoi(*result.Item[apimodel.SafeDistanceInMeterColumnName].N)
 	if err != nil {
-		anlogger.Errorf(lc, "get_settings.go : error while parsing db response for userId [%s] : %v", userId, err)
+		anlogger.Errorf(lc, "get_settings.go : error while parsing db response for userId [%s], resp=%v : %v", userId, result.Item, err)
 		return nil, false, apimodel.InternalServerError
 	}
 
@@ -174,7 +172,7 @@ func getUserSettings(userId string, lc *lambdacontext.LambdaContext) (*apimodel.
 		InAppMatches:        *result.Item[apimodel.InAppMatchesColumnName].BOOL,
 		InAppLikes:          *result.Item[apimodel.InAppLikesColumnName].S,
 	}
-	anlogger.Debugf(lc, "get_settings.go : successfully return user setting for userId  [%s], setting=%v", userId, userSettings)
+	anlogger.Debugf(lc, "get_settings.go : successfully return user setting for userId [%s], setting=%v", userId, userSettings)
 	return userSettings, true, ""
 }
 

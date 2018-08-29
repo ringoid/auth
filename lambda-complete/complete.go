@@ -133,16 +133,19 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	reqParam, ok := parseParams(request.Body, lc)
 	if !ok {
+		anlogger.Errorf(lc, "complete.go : return %s to client", apimodel.WrongRequestParamsClientError)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.WrongRequestParamsClientError}, nil
 	}
 
 	userInfo, ok, errStr := fetchBySessionId(reqParam.SessionId, lc)
 	if !ok {
+		anlogger.Errorf(lc, "complete.go : userId [%s], return %s to client", userInfo.UserId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
 	ok, errStr = completeVerify(userInfo, reqParam.VerificationCode, lc)
 	if !ok {
+		anlogger.Errorf(lc, "complete.go : userId [%s], return %s to client", userInfo.UserId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
@@ -151,27 +154,32 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	accessToken, err := uuid.NewV4()
 	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error while generate accessToken : %v", err)
+		anlogger.Errorf(lc, "complete.go : error while generate accessToken for userId [%s] : %v", userInfo.UserId, err)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
 
 	userExist, ok, errStr := updateAccessToke(userInfo.UserId, accessToken.String(), lc)
 	if !ok {
+		anlogger.Errorf(lc, "complete.go : userId [%s], return %s to client", userInfo.UserId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
 	resp := apimodel.VerifyResp{AccessToken: accessToken.String(), AccountAlreadyExist: userExist}
 	body, err := json.Marshal(resp)
 	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error while marshaling resp object : %v", err)
+		anlogger.Errorf(lc, "complete.go : error while marshaling resp object %v for userId [%s] : %v", resp, userInfo.UserId, err)
+		anlogger.Errorf(lc, "complete.go : userId [%s], return %s to client", userInfo.UserId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
 	//return OK with AccessToken
+	anlogger.Debugf(lc, "complete.go : return body=%s to client, userId [%s]", string(body), userInfo.UserId)
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
 }
 
 //return do we already have such user, ok, errorString if not ok
 func updateAccessToke(userId, accessToken string, lc *lambdacontext.LambdaContext) (bool, bool, string) {
+	anlogger.Debugf(lc, "complete.go : update accessToken [%s] for userId [%s]", accessToken, userId)
+
 	input := &dynamodb.UpdateItemInput{
 		ExpressionAttributeNames: map[string]*string{
 			"#token":     aws.String(apimodel.AccessTokenColumnName),
@@ -198,25 +206,27 @@ func updateAccessToke(userId, accessToken string, lc *lambdacontext.LambdaContex
 	result, err := awsDbClient.UpdateItem(input)
 
 	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error while save access token : %v", err)
+		anlogger.Errorf(lc, "complete.go : error update accessToken [%s] for userId [%s] : %v", accessToken, userId, err)
 		return false, false, apimodel.InternalServerError
 	}
 
 	_, ok := result.Attributes[apimodel.SexColumnName]
 
-	anlogger.Infof(lc, "complete.go : user already exist - [%v]", ok)
+	anlogger.Debugf(lc, "complete.go : successfully update accessToken [%s] for userId [%s]", accessToken, userId)
 	return ok, true, ""
 }
 
 //return ok and error string if not
 func completeVerify(userInfo *apimodel.UserInfo, verificationCode string, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "complete.go : verify phone for userId [%s], userInfo=%v", userInfo.UserId, userInfo)
+
 	url := fmt.Sprintf("https://api.authy.com/protected/json/phones/verification/check?phone_number=%s&country_code=%d&verification_code=%s",
 		userInfo.PhoneNumber, userInfo.CountryCode, verificationCode)
 
 	req, err := http.NewRequest("GET", url, nil)
 
 	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error while construct the request : %v", err)
+		anlogger.Errorf(lc, "complete.go : error while construct the request, userId [%s] : %v", userInfo.UserId, err)
 		return false, apimodel.InternalServerError
 	}
 
@@ -225,34 +235,35 @@ func completeVerify(userInfo *apimodel.UserInfo, verificationCode string, lc *la
 
 	client := &http.Client{}
 
-	anlogger.Debugf(lc, "complete.go : make GET request by url %s", url)
+	anlogger.Debugf(lc, "complete.go : make GET request by url %s, userId [%s]", url, userInfo.UserId)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		anlogger.Fatalf(lc, "complete.go : error while making request : %v", err)
+		anlogger.Fatalf(lc, "complete.go : error while making GET request, userId [%s] : %v", userInfo.UserId, err)
 		return false, apimodel.InternalServerError
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error reading response body from Twilio : %v", err)
+		anlogger.Errorf(lc, "complete.go : error reading response body from Twilio, userId [%s] : %v", userInfo.UserId, err)
 		return false, apimodel.InternalServerError
 	}
-
+	anlogger.Debugf(lc, "complete.go : receive response from Twilio, body=%s, userId [%s]", string(body), userInfo.UserId)
 	if resp.StatusCode != 200 {
-		anlogger.Errorf(lc, "complete.go : error while sending sms, status %v, body %v",
-			resp.StatusCode, string(body))
+		anlogger.Errorf(lc, "complete.go : error while sending sms, status %v, body %v, userId [%s]",
+			resp.StatusCode, string(body), userInfo.UserId)
 
 		var errorResp map[string]interface{}
 		err := json.Unmarshal(body, &errorResp)
 		if err != nil {
-			anlogger.Errorf(lc, "complete.go : error parsing Twilio response : %v", err)
+			anlogger.Errorf(lc, "complete.go : error parsing Twilio response, body=%s, userId [%s] : %v", body, userInfo.UserId, err)
 			return false, apimodel.InternalServerError
 		}
 
 		if errorCodeObject, ok := errorResp["error_code"]; ok {
 			if errorCodeStr, ok := errorCodeObject.(string); ok {
+				anlogger.Errorf(lc, "complete.go : error verify phone, error_code=%s, userId [%s]", errorCodeStr, userInfo.UserId)
 				switch errorCodeStr {
 				case "60023":
 					return false, apimodel.NoPendingVerificationClientError
@@ -265,8 +276,8 @@ func completeVerify(userInfo *apimodel.UserInfo, verificationCode string, lc *la
 		return false, apimodel.InternalServerError
 	}
 
-	anlogger.Infof(lc, "complete.go : successfully complete verification for user %v, response body %v",
-		userInfo, string(body))
+	anlogger.Infof(lc, "complete.go : successfully complete verify for userId [%s], userInfo=%v",
+		userInfo.UserId, userInfo)
 	return true, ""
 }
 
@@ -275,7 +286,7 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Veri
 	err := json.Unmarshal([]byte(params), &req)
 
 	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error parsing required params from the string %s : %v", params, err)
+		anlogger.Errorf(lc, "complete.go : error unmarshal required params from the string %s : %v", params, err)
 		return nil, false
 	}
 
@@ -289,6 +300,8 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Veri
 
 //return userInfo, is everything ok and error string if not
 func fetchBySessionId(sessionId string, lc *lambdacontext.LambdaContext) (*apimodel.UserInfo, bool, string) {
+	anlogger.Debugf(lc, "complete.go : fetch userInfo by sessionId [%s]", sessionId)
+
 	input := &dynamodb.QueryInput{
 		ExpressionAttributeNames: map[string]*string{
 			"#sessionId": aws.String(apimodel.SessionIdColumnName),
@@ -306,17 +319,17 @@ func fetchBySessionId(sessionId string, lc *lambdacontext.LambdaContext) (*apimo
 	res, err := awsDbClient.Query(input)
 
 	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error while fetch userInfo by sessionId : %v", err)
+		anlogger.Errorf(lc, "complete.go : error while fetch userInfo by sessionId [%s] : %v", sessionId, err)
 		return &apimodel.UserInfo{}, false, apimodel.InternalServerError
 	}
 
 	if len(res.Items) == 0 {
-		anlogger.Warnf(lc, "complete.go : wrong sessionId %s", sessionId)
+		anlogger.Warnf(lc, "complete.go : wrong sessionId [%s], there is no userInfo with such sessionId", sessionId)
 		return &apimodel.UserInfo{}, false, apimodel.WrongSessionIdClientError
 	}
 
 	if len(res.Items) != 1 {
-		anlogger.Errorf(lc, "complete.go : error several userInfo by one sessionId")
+		anlogger.Errorf(lc, "complete.go : error several userInfo by one sessionId [%s], result=%v", sessionId, res.Items)
 		return &apimodel.UserInfo{}, false, apimodel.InternalServerError
 	}
 	userId := *res.Items[0][apimodel.UserIdColumnName].S
@@ -326,17 +339,23 @@ func fetchBySessionId(sessionId string, lc *lambdacontext.LambdaContext) (*apimo
 
 	countryCode, err := strconv.Atoi(*res.Items[0][apimodel.CountryCodeColumnName].S)
 	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error while parsing country code : %v", err)
+		anlogger.Errorf(lc, "complete.go : error while parsing country code, sessionId [%s] : %v", sessionId, err)
 		return &apimodel.UserInfo{}, false, apimodel.InternalServerError
 	}
+	customerId := *res.Items[0][apimodel.CustomerIdColumnName].S
 
-	return &apimodel.UserInfo{
+	userInfo := &apimodel.UserInfo{
 		UserId:      userId,
 		SessionId:   sessId,
 		Phone:       phone,
 		CountryCode: countryCode,
 		PhoneNumber: phonenumber,
-	}, true, ""
+		CustomerId:  customerId,
+	}
+
+	anlogger.Debugf(lc, "complete.go : successfully fetch userInfo %v by sessionId [%s]", userInfo, sessionId)
+
+	return userInfo, true, ""
 }
 
 func main() {
