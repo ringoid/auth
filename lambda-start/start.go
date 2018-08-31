@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/firehose"
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"crypto/sha1"
 )
 
 var anlogger *syslog.Logger
@@ -118,36 +119,38 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	reqParam, ok := parseParams(request.Body, lc)
 	if !ok {
-		anlogger.Errorf(lc, "start.go : return %s to client", apimodel.WrongRequestParamsClientError)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.WrongRequestParamsClientError}, nil
+		strErr := apimodel.WrongRequestParamsClientError
+		anlogger.Errorf(lc, "start.go : return %s to client", strErr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: strErr}, nil
 	}
 
 	sourceIp := request.RequestContext.Identity.SourceIP
+	fullPhone := strconv.Itoa(reqParam.CountryCallingCode) + reqParam.Phone
 
-	userId, err := uuid.NewV4()
-	if err != nil {
-		anlogger.Errorf(lc, "start.go : error while generate userId : %v", err)
-		anlogger.Errorf(lc, "start.go : return %s to client", apimodel.InternalServerError)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
+	userId, ok, errStr := generateUserId(fullPhone, lc)
+	if !ok {
+		anlogger.Errorf(lc, "start.go : return %s to client", errStr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
 	sessionId, err := uuid.NewV4()
 	if err != nil {
+		strErr := apimodel.InternalServerError
 		anlogger.Errorf(lc, "start.go : error while generate sessionId for userId [%s] : %v", userId, err)
-		anlogger.Errorf(lc, "start.go : return %s to client", apimodel.InternalServerError)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
+		anlogger.Errorf(lc, "start.go : return %s to client", strErr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: strErr}, nil
 	}
-	fullPhone := strconv.Itoa(reqParam.CountryCallingCode) + reqParam.Phone
 
 	customerId, err := uuid.NewV4()
 	if err != nil {
+		strErr := apimodel.InternalServerError
 		anlogger.Errorf(lc, "start.go : error while generate customerId : %v", err)
-		anlogger.Errorf(lc, "start.go : return %s to client", apimodel.InternalServerError)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
+		anlogger.Errorf(lc, "start.go : return %s to client", strErr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: strErr}, nil
 	}
 
 	userInfo := &apimodel.UserInfo{
-		UserId:      userId.String(),
+		UserId:      userId,
 		SessionId:   sessionId.String(),
 		Phone:       fullPhone,
 		CountryCode: reqParam.CountryCallingCode,
@@ -163,6 +166,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	resp := apimodel.AuthResp{}
 	resp.CustomerId = resCustomerId
+
 	if wasCreated {
 		anlogger.Debugf(lc, "start.go : new userId was reserved, userId [%s] and sessionId [%s]", resUserId, resSessionId)
 		resp.SessionId = resSessionId
@@ -173,7 +177,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 		}
 		resp.SessionId = newSessionId
-		anlogger.Debugf(lc, "start.go : userId for such phone [%s] was previously reserved, new sessionId [%s] id was generated",
+		anlogger.Debugf(lc, "start.go : userId for such phone [%s] was previously reserved, new sessionId [%s] was generated",
 			userInfo.Phone, resp.SessionId)
 	}
 	//send analytics event
@@ -181,7 +185,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	apimodel.SendAnalyticEvent(event, resUserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	//send sms
-	ok, errorStr := startVerify(reqParam.CountryCallingCode, reqParam.Phone, reqParam.Locale, lc)
+	ok, errorStr := startVerify(userInfo.CountryCode, userInfo.PhoneNumber, reqParam.Locale, lc)
 	if !ok {
 		anlogger.Errorf(lc, "start.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
@@ -193,9 +197,33 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		anlogger.Errorf(lc, "start.go : return %s to client", apimodel.InternalServerError)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
-	//return OK with SessionId
-	anlogger.Debugf(lc, "start.go : return body=%s to the client", string(body))
-	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
+	strResp := string(body)
+	anlogger.Infof(lc, "start.go : successfully initiate verification for userId [%s], return body=%s to the client", resUserId, strResp)
+	return events.APIGatewayProxyResponse{StatusCode: 200, Body: strResp}, nil
+}
+
+//return generated userId, was everything ok and error string
+func generateUserId(phone string, lc *lambdacontext.LambdaContext) (string, bool, string) {
+	anlogger.Debugf(lc, "start.go : generate userId for phone [%s]", phone)
+	saltForUserId, err := uuid.NewV4()
+	if err != nil {
+		anlogger.Errorf(lc, "start.go : error while generate salt for userId, phone [%s] : %v", phone, err)
+		return "", false, apimodel.InternalServerError
+	}
+	sha := sha1.New()
+	_, err = sha.Write([]byte(phone))
+	if err != nil {
+		anlogger.Errorf(lc, "start.go : error while write phone to sha algo, phone [%s] : %v", phone, err)
+		return "", false, apimodel.InternalServerError
+	}
+	_, err = sha.Write([]byte(saltForUserId.String()))
+	if err != nil {
+		anlogger.Errorf(lc, "start.go : error while write salt to sha algo, phone [%s] : %v", phone, err)
+		return "", false, apimodel.InternalServerError
+	}
+	resultUserId := fmt.Sprintf("%x", sha.Sum(nil))
+	anlogger.Debugf(lc, "start.go : successfully generate userId [%s] for phone [%s]", resultUserId, phone)
+	return resultUserId, true, ""
 }
 
 //return updated sessionId, is everything ok and error string
@@ -280,7 +308,7 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 					S: aws.String(userInfo.Phone),
 				},
 			},
-			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", apimodel.UserIdColumnName)),
+			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", apimodel.PhoneColumnName)),
 
 			TableName:        aws.String(userTableName),
 			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV, #customerId = :cIdV"),
@@ -323,6 +351,7 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Star
 		return nil, false
 	}
 
+	anlogger.Debugf(lc, "start.go : successfully parse param string [%s] to request=%v", params, req)
 	return &req, true
 }
 
