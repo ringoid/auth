@@ -39,7 +39,7 @@ func NewDefaultSettings(userId, sex string) *UserSettings {
 		return &UserSettings{
 			UserId:              userId,
 			WhoCanSeePhoto:      "OPPOSITE",
-			SafeDistanceInMeter: 10,
+			SafeDistanceInMeter: 25,
 			PushMessages:        false,
 			PushMatches:         true,
 			PushLikes:           "10_NEW",
