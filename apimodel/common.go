@@ -11,6 +11,9 @@ const (
 	TwilioApiKeyName    = "twilio-api-key"
 	TwilioSecretKeyBase = "%s/Twilio/Api/Key"
 
+	SecretWordKeyName = "secret-word-key"
+	SecretWordKeyBase = "%s/SecretWord"
+
 	SessionGSIName = "sessionGSI"
 
 	PhoneColumnName     = "phone"
@@ -21,8 +24,8 @@ const (
 	PhoneNumberColumnName      = "phone_number"
 	TokenUpdatedTimeColumnName = "token_updated_at"
 
-	AccessTokenColumnName = "access_token"
-	SexColumnName         = "sex"
+	SessionTokenColumnName = "session_token"
+	SexColumnName          = "sex"
 
 	AccessTokenGSIName    = "accessTokenGSI"
 	YearOfBirthColumnName = "year_of_birth"
@@ -39,6 +42,9 @@ const (
 	InAppMessagesColumnName       = "in_app_messages"
 	InAppMatchesColumnName        = "in_app_matches"
 	InAppLikesColumnName          = "in_app_likes"
+
+	AccessTokenUserIdClaim       = "userId"
+	AccessTokenSessionTokenClaim = "sessionToken"
 
 	InternalServerError           = `{"errorCode":"InternalServerError","errorMessage":"Internal Server Error"}`
 	WrongRequestParamsClientError = `{"errorCode":"WrongParamsClientError","errorMessage":"Wrong request params"}`

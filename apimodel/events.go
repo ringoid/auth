@@ -15,19 +15,21 @@ type UserAcceptTermsEvent struct {
 	DateTimeTermsAndConditions int64  `json:"dtTC"`
 	DateTimePrivacyNotes       int64  `json:"dtPN"`
 	DateTimeLegalAge           int64  `json:"dtLA"`
+	CustomerId                 string `json:"customerId"`
 }
 
 func (event UserAcceptTermsEvent) String() string {
-	return fmt.Sprintf("[UserAcceptTermsEvent={userId=%s, locale=%s, sourceIp=%s, clientValidationFail=%v, unixTime=%v, dtTC=%v, dtPN=%v, dtLA=%v, eventType=%s}]",
-		event.UserId, event.Locale, event.SourceIp, event.ClientValidationFail, event.UnixTime, event.DateTimeTermsAndConditions, event.DateTimePrivacyNotes, event.DateTimeLegalAge, event.EventType)
+	return fmt.Sprintf("[UserAcceptTermsEvent={userId=%s, locale=%s, sourceIp=%s, clientValidationFail=%v, customerId=%s, unixTime=%v, dtTC=%v, dtPN=%v, dtLA=%v, eventType=%s}]",
+		event.UserId, event.Locale, event.SourceIp, event.ClientValidationFail, event.CustomerId, event.UnixTime, event.DateTimeTermsAndConditions, event.DateTimePrivacyNotes, event.DateTimeLegalAge, event.EventType)
 }
 
-func NewUserAcceptTermsEvent(req *StartReq, sourceIp, userId string) *UserAcceptTermsEvent {
+func NewUserAcceptTermsEvent(req *StartReq, sourceIp, userId, customerId string) *UserAcceptTermsEvent {
 	return &UserAcceptTermsEvent{
 		UserId: userId,
 		Locale: req.Locale,
 		//gdpr?
-		SourceIp: sourceIp,
+		SourceIp:   sourceIp,
+		CustomerId: customerId,
 
 		ClientValidationFail:       req.ClientValidationFail,
 		UnixTime:                   time.Now().Unix(),

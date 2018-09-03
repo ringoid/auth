@@ -16,6 +16,7 @@ import (
 var anlogger *syslog.Logger
 var awsDbClient *dynamodb.DynamoDB
 var userProfileTable string
+var secretWord string
 
 func init() {
 	var env string
@@ -60,6 +61,8 @@ func init() {
 	}
 	anlogger.Debugf(nil, "internal_get_user_id.go : aws session was successfully initialized")
 
+	secretWord = apimodel.GetSecret(fmt.Sprintf(apimodel.SecretWordKeyBase, env), apimodel.SecretWordKeyName, awsSession, anlogger, nil)
+
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "internal_get_user_id.go : dynamodb client was successfully initialized")
 }
@@ -69,14 +72,35 @@ func handler(ctx context.Context, request apimodel.InternalGetUserIdReq) (apimod
 
 	anlogger.Debugf(lc, "internal_get_user_id.go : start handle request %v", request)
 
-	userId, _, errStr := apimodel.FindUserId(request.AccessToken, userProfileTable, awsDbClient, anlogger, lc)
-
 	resp := apimodel.InternalGetUserIdResp{
-		Error:  errStr,
-		UserId: userId,
+		Error:  "",
+		UserId: "",
 	}
 
-	anlogger.Debugf(lc, "internal_get_user_id.go : response %v", resp)
+	userId, sessionToken, ok, errStr := apimodel.DecodeToken(request.AccessToken, secretWord, anlogger, lc)
+	if !ok {
+		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", errStr)
+		resp.Error = errStr
+		return resp, nil
+	}
+
+	valid, ok, errStr := apimodel.IsSessionValid(userId, sessionToken, userProfileTable, awsDbClient, anlogger, lc)
+	if !ok {
+		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", errStr)
+		resp.Error = errStr
+		return resp, nil
+	}
+
+	if !valid {
+		errStr = apimodel.InvalidAccessTokenClientError
+		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", errStr)
+		resp.Error = errStr
+		return resp, nil
+	}
+
+	resp.UserId = userId
+
+	anlogger.Debugf(lc, "internal_get_user_id.go : successfully check access token and return userId response %v", resp)
 
 	return resp, nil
 }

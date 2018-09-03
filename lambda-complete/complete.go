@@ -11,9 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/firehose"
 	"os"
 	"fmt"
-	"strings"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"encoding/json"
 	"github.com/aws/aws-lambda-go/events"
 	"net/http"
@@ -21,14 +19,15 @@ import (
 	"github.com/satori/go.uuid"
 	"time"
 	"github.com/aws/aws-lambda-go/lambdacontext"
+	"github.com/dgrijalva/jwt-go"
 )
 
 var anlogger *syslog.Logger
 var twilioKey string
+var secretWord string
 var awsDbClient *dynamodb.DynamoDB
 var userTableName string
 var userProfileTable string
-var neo4jurl string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 
@@ -38,7 +37,6 @@ func init() {
 	var papertrailAddress string
 	var err error
 	var awsSession *session.Session
-	var twilioSecretKeyName string
 
 	env, ok = os.LookupEnv("ENV")
 	if !ok {
@@ -68,13 +66,6 @@ func init() {
 	}
 	anlogger.Debugf(nil, "complete.go : start with USER_TABLE = [%s]", userTableName)
 
-	neo4jurl, ok = os.LookupEnv("NEO4J_URL")
-	if !ok {
-		fmt.Printf("complete.go : env can not be empty NEO4J_URL")
-		os.Exit(1)
-	}
-	anlogger.Debugf(nil, "complete.go : start with NEO4J_URL = [%s]", neo4jurl)
-
 	userProfileTable, ok = os.LookupEnv("USER_PROFILE_TABLE")
 	if !ok {
 		fmt.Printf("complete.go : env can not be empty USER_PROFILE_TABLE")
@@ -90,27 +81,8 @@ func init() {
 	}
 	anlogger.Debugf(nil, "complete.go : aws session was successfully initialized")
 
-	twilioSecretKeyName = fmt.Sprintf(apimodel.TwilioSecretKeyBase, env)
-	svc := secretsmanager.New(awsSession)
-	input := &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(twilioSecretKeyName),
-	}
-
-	result, err := svc.GetSecretValue(input)
-	if err != nil {
-		anlogger.Fatalf(nil, "complete.go : error reading %s secret from Secret Manager : %v", twilioSecretKeyName, err)
-	}
-	var secretMap map[string]string
-	decoder := json.NewDecoder(strings.NewReader(*result.SecretString))
-	err = decoder.Decode(&secretMap)
-	if err != nil {
-		anlogger.Fatalf(nil, "complete.go : error decode %s secret from Secret Manager : %v", twilioSecretKeyName, err)
-	}
-	twilioKey, ok = secretMap[apimodel.TwilioApiKeyName]
-	if !ok {
-		anlogger.Fatalln(nil, "complete.go : Twilio Api Key is empty")
-	}
-	anlogger.Debugf(nil, "complete.go : Twilio Api Key was successfully initialized")
+	twilioKey = apimodel.GetSecret(fmt.Sprintf(apimodel.TwilioSecretKeyBase, env), apimodel.TwilioApiKeyName, awsSession, anlogger, nil)
+	secretWord = apimodel.GetSecret(fmt.Sprintf(apimodel.SecretWordKeyBase, env), apimodel.SecretWordKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "complete.go : dynamodb client was successfully initialized")
@@ -133,8 +105,9 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	reqParam, ok := parseParams(request.Body, lc)
 	if !ok {
-		anlogger.Errorf(lc, "complete.go : return %s to client", apimodel.WrongRequestParamsClientError)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.WrongRequestParamsClientError}, nil
+		errStr := apimodel.WrongRequestParamsClientError
+		anlogger.Errorf(lc, "complete.go : return %s to client", errStr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
 	userInfo, ok, errStr := fetchBySessionId(reqParam.SessionId, lc)
@@ -152,19 +125,31 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	event := apimodel.NewUserVerificationCompleteEvent(userInfo.UserId)
 	apimodel.SendAnalyticEvent(event, userInfo.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
-	accessToken, err := uuid.NewV4()
+	sessionToken, err := uuid.NewV4()
 	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error while generate accessToken for userId [%s] : %v", userInfo.UserId, err)
+		anlogger.Errorf(lc, "complete.go : error while generate sessionToken for userId [%s] : %v", userInfo.UserId, err)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
 
-	userExist, ok, errStr := updateAccessToke(userInfo.UserId, accessToken.String(), lc)
+	userExist, ok, errStr := updateSessionToken(userInfo.UserId, sessionToken.String(), lc)
 	if !ok {
 		anlogger.Errorf(lc, "complete.go : userId [%s], return %s to client", userInfo.UserId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	resp := apimodel.VerifyResp{AccessToken: accessToken.String(), AccountAlreadyExist: userExist}
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		apimodel.AccessTokenUserIdClaim:       userInfo.UserId,
+		apimodel.AccessTokenSessionTokenClaim: sessionToken.String(),
+	})
+
+	tokenToString, err := accessToken.SignedString([]byte(secretWord))
+	if err != nil {
+		errStr = apimodel.InternalServerError
+		anlogger.Errorf(lc, "complete.go : error sign the token for userId [%s], return %s to the client : %v", errStr, err)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+	}
+
+	resp := apimodel.VerifyResp{AccessToken: tokenToString, AccountAlreadyExist: userExist}
 	body, err := json.Marshal(resp)
 	if err != nil {
 		anlogger.Errorf(lc, "complete.go : error while marshaling resp object %v for userId [%s] : %v", resp, userInfo.UserId, err)
@@ -177,17 +162,17 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 }
 
 //return do we already have such user, ok, errorString if not ok
-func updateAccessToke(userId, accessToken string, lc *lambdacontext.LambdaContext) (bool, bool, string) {
-	anlogger.Debugf(lc, "complete.go : update accessToken [%s] for userId [%s]", accessToken, userId)
+func updateSessionToken(userId, sessionToken string, lc *lambdacontext.LambdaContext) (bool, bool, string) {
+	anlogger.Debugf(lc, "complete.go : update sessionToken [%s] for userId [%s]", sessionToken, userId)
 
 	input := &dynamodb.UpdateItemInput{
 		ExpressionAttributeNames: map[string]*string{
-			"#token":     aws.String(apimodel.AccessTokenColumnName),
+			"#token":     aws.String(apimodel.SessionTokenColumnName),
 			"#updatedAt": aws.String(apimodel.TokenUpdatedTimeColumnName),
 		},
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":tV": {
-				S: aws.String(accessToken),
+				S: aws.String(sessionToken),
 			},
 			":uV": {
 				S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
@@ -206,13 +191,13 @@ func updateAccessToke(userId, accessToken string, lc *lambdacontext.LambdaContex
 	result, err := awsDbClient.UpdateItem(input)
 
 	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error update accessToken [%s] for userId [%s] : %v", accessToken, userId, err)
+		anlogger.Errorf(lc, "complete.go : error update sessionToken [%s] for userId [%s] : %v", sessionToken, userId, err)
 		return false, false, apimodel.InternalServerError
 	}
 
 	_, ok := result.Attributes[apimodel.SexColumnName]
 
-	anlogger.Debugf(lc, "complete.go : successfully update accessToken [%s] for userId [%s]", accessToken, userId)
+	anlogger.Debugf(lc, "complete.go : successfully update sessionToken [%s] for userId [%s]", sessionToken, userId)
 	return ok, true, ""
 }
 
@@ -276,7 +261,7 @@ func completeVerify(userInfo *apimodel.UserInfo, verificationCode string, lc *la
 		return false, apimodel.InternalServerError
 	}
 
-	anlogger.Infof(lc, "complete.go : successfully complete verify for userId [%s], userInfo=%v",
+	anlogger.Debugf(lc, "complete.go : successfully complete verification for userId [%s], userInfo=%v",
 		userInfo.UserId, userInfo)
 	return true, ""
 }

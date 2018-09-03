@@ -7,52 +7,66 @@ import (
 	"encoding/json"
 	"github.com/aws/aws-sdk-go/service/firehose"
 	"github.com/aws/aws-lambda-go/lambdacontext"
+	"github.com/dgrijalva/jwt-go"
+	"fmt"
+	"strings"
+	"github.com/aws/aws-sdk-go/service/secretsmanager"
+	"github.com/aws/aws-sdk-go/aws/session"
 )
 
-//return userId, was everything ok, error string in case of error
-func FindUserId(accessToken, userProfileTableName string, awsDbClient *dynamodb.DynamoDB,
-	anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (string, bool, string) {
-	anlogger.Debugf(lc, "common_action.go : find user by accessToken [%s]", accessToken)
+//return userId, sessionToken, ok, error string
+func DecodeToken(token, secretWord string, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (string, string, bool, string) {
 
-	if len(accessToken) == 0 {
-		anlogger.Errorf(lc, "common_action.go : empty access token")
-		return "", false, WrongRequestParamsClientError
+	receiveToken, err := jwt.Parse(token, func(rt *jwt.Token) (interface{}, error) {
+		if _, ok := rt.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", rt.Header["alg"])
+		}
+		return []byte(secretWord), nil
+	})
+	if err != nil {
+		anlogger.Warnf(lc, "common_action.go : error parse access token [%s] : %v", token, err)
+		return "", "", false, InternalServerError
 	}
 
-	input := &dynamodb.QueryInput{
-		ExpressionAttributeNames: map[string]*string{
-			"#token": aws.String(AccessTokenColumnName),
-		},
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":tV": {
-				S: aws.String(accessToken),
+	if claims, ok := receiveToken.Claims.(jwt.MapClaims); ok && receiveToken.Valid {
+		userId := fmt.Sprintf("%v", claims[AccessTokenUserIdClaim])
+		sessionToken := fmt.Sprintf("%v", claims[AccessTokenSessionTokenClaim])
+		anlogger.Debugf(lc, "common_action.go : successfully parse access token, userId [%s], sessionToken [%s]", userId, sessionToken)
+		return userId, sessionToken, true, ""
+	} else {
+		anlogger.Warnf(lc, "common_action.go : access token [%s] is not valid", token)
+		return "", "", false, InternalServerError
+	}
+}
+
+//return is session valid, ok, error string
+func IsSessionValid(userId, sessionToken, userProfileTableName string, awsDbClient *dynamodb.DynamoDB,
+	anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (bool, bool, string) {
+
+	anlogger.Debugf(lc, "common_action.go : check that sessionToken [%s] is valid for userId [%s]", sessionToken, userId)
+	input := &dynamodb.GetItemInput{
+		Key: map[string]*dynamodb.AttributeValue{
+			UserIdColumnName: {
+				S: aws.String(userId),
 			},
 		},
-		KeyConditionExpression: aws.String("#token = :tV"),
-		TableName:              aws.String(userProfileTableName),
-		IndexName:              aws.String(AccessTokenGSIName),
+		TableName: aws.String(userProfileTableName),
 	}
 
-	result, err := awsDbClient.Query(input)
+	result, err := awsDbClient.GetItem(input)
 	if err != nil {
-		anlogger.Errorf(lc, "common_action.go : error while find user by accessToken [%s] : %v", accessToken, err)
-		return "", false, InternalServerError
+		anlogger.Errorf(lc, "common_action.go : error getting userInfo for userId [%s] : %v", userId, err)
+		return false, false, InternalServerError
 	}
 
-	if len(result.Items) == 0 {
-		anlogger.Warnf(lc, "common_action.go : warning, there is no user with such accessToken [%s]", accessToken)
-		return "", false, InvalidAccessTokenClientError
+	lastSessionToken := *result.Item[SessionTokenColumnName].S
+	if sessionToken != lastSessionToken {
+		anlogger.Warnf(lc, "common_action.go : sessionToken [%s] expired for userId [%s]", sessionToken, userId)
+		return false, true, ""
 	}
 
-	if len(result.Items) > 1 {
-		anlogger.Errorf(lc, "common_action.go : error, there more than one user with such accessToken [%s]", accessToken)
-		return "", false, InternalServerError
-	}
-
-	userId := *result.Items[0][UserIdColumnName].S
-	anlogger.Debugf(lc, "common_action.go : successfully found userId [%s] by accessToken [%s]", userId, accessToken)
-
-	return userId, true, ""
+	anlogger.Debugf(lc, "common_action.go : session token is valid for userId [%s]", userId)
+	return true, true, ""
 }
 
 func SendAnalyticEvent(event interface{}, userId, deliveryStreamName string, awsDeliveryStreamClient *firehose.Firehose,
@@ -77,4 +91,29 @@ func SendAnalyticEvent(event interface{}, userId, deliveryStreamName string, aws
 	}
 
 	anlogger.Debugf(lc, "common_action.go : successfully send analytics event [%v] for userId [%s]", event, userId)
+}
+
+func GetSecret(secretBase, secretKeyName string, awsSession *session.Session, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) string {
+	svc := secretsmanager.New(awsSession)
+	input := &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(secretBase),
+	}
+
+	result, err := svc.GetSecretValue(input)
+	if err != nil {
+		anlogger.Fatalf(lc, "common_action.go : error reading %s secret from Secret Manager : %v", secretBase, err)
+	}
+	var secretMap map[string]string
+	decoder := json.NewDecoder(strings.NewReader(*result.SecretString))
+	err = decoder.Decode(&secretMap)
+	if err != nil {
+		anlogger.Fatalf(lc, "common_action.go : error decode %s secret from Secret Manager : %v", secretBase, err)
+	}
+	secret, ok := secretMap[secretKeyName]
+	if !ok {
+		anlogger.Fatalf(lc, "common_action.go : secret %s is empty", secretBase)
+	}
+	anlogger.Debugf(lc, "common_action.go : secret %s was successfully initialized", secretBase)
+
+	return secret
 }

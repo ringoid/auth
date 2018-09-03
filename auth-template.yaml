@@ -172,7 +172,7 @@ Resources:
       Policies:
         - AmazonDynamoDBFullAccess
         - AmazonKinesisFirehoseFullAccess
-
+        - SecretsManagerReadWrite
       Events:
         CompleteEvent:
           Type: Api
@@ -190,7 +190,7 @@ Resources:
       Policies:
         - AmazonDynamoDBFullAccess
         - AmazonKinesisFirehoseFullAccess
-
+        - SecretsManagerReadWrite
       Events:
         CompleteEvent:
           Type: Api
@@ -208,7 +208,7 @@ Resources:
       Policies:
         - AmazonDynamoDBFullAccess
         - AmazonKinesisFirehoseFullAccess
-
+        - SecretsManagerReadWrite
       Events:
         CompleteEvent:
           Type: Api
@@ -225,7 +225,7 @@ Resources:
       Description: Internal function to get userId
       Policies:
         - AmazonDynamoDBFullAccess
-
+        - SecretsManagerReadWrite
   UserProfileTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -233,9 +233,6 @@ Resources:
           AttributeDefinitions:
             -
               AttributeName: user_id
-              AttributeType: S
-            -
-              AttributeName: access_token
               AttributeType: S
           KeySchema:
             -
@@ -245,19 +242,6 @@ Resources:
           ProvisionedThroughput:
             ReadCapacityUnits: !FindInMap [UserProfileTableCUMap, !Ref Env, rcucrt]
             WriteCapacityUnits: !FindInMap [UserProfileTableCUMap, !Ref Env, wcucrt]
-
-          GlobalSecondaryIndexes:
-            -
-              IndexName: accessTokenGSI
-              KeySchema:
-                -
-                  AttributeName: access_token
-                  KeyType: HASH
-              Projection:
-                ProjectionType: ALL
-              ProvisionedThroughput:
-                ReadCapacityUnits: !FindInMap [UserProfileTableCUMap, !Ref Env, rcucrt]
-                WriteCapacityUnits: !FindInMap [UserProfileTableCUMap, !Ref Env, wcucrt]
 
           Tags:
             - Key: Company
@@ -328,73 +312,6 @@ Resources:
         ScaleOutCooldown: 60
         PredefinedMetricSpecification:
           PredefinedMetricType: DynamoDBReadCapacityUtilization
-
-  UserProfileTableAccessTokenGSIWriteCapacityScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: UserProfileTable
-    Properties:
-      MaxCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, wcumax]
-      MinCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, wcumin]
-      ResourceId: !Join
-        - /
-        - - table
-          - !Join [ "-", [ !Ref Env, Auth, UserProfileTable] ]
-          - index
-          - accessTokenGSI
-      RoleARN: !GetAtt
-        - ScalingRole
-        - Arn
-      ScalableDimension: "dynamodb:index:WriteCapacityUnits"
-      ServiceNamespace: dynamodb
-
-  UserProfileTableAccessTokenGSIReadCapacityScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: UserProfileTable
-    Properties:
-      MaxCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, rcumax]
-      MinCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, rcumin]
-      ResourceId: !Join
-        - /
-        - - table
-          - !Join [ "-", [ !Ref Env, Auth, UserProfileTable] ]
-          - index
-          - accessTokenGSI
-      RoleARN: !GetAtt
-        - ScalingRole
-        - Arn
-      ScalableDimension: "dynamodb:index:ReadCapacityUnits"
-      ServiceNamespace: dynamodb
-
-  UserProfileTableAccessTokenGSIWriteScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: UserProfileTable
-    Properties:
-      PolicyName: WriteAutoScalingPolicy
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId:
-        Ref: UserProfileTableAccessTokenGSIWriteCapacityScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 70
-        ScaleInCooldown: 60
-        ScaleOutCooldown: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: DynamoDBWriteCapacityUtilization
-
-  UserProfileTableAccessTokenGSIReadScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: UserProfileTable
-    Properties:
-      PolicyName: ReadAutoScalingPolicy
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId:
-        Ref: UserProfileTableAccessTokenGSIReadCapacityScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 70
-        ScaleInCooldown: 60
-        ScaleOutCooldown: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: DynamoDBReadCapacityUtilization
-
 
 
   UserTable:

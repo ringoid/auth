@@ -24,6 +24,7 @@ var userSettingsTable string
 var neo4jurl string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
+var secretWord string
 
 func init() {
 	var env string
@@ -82,6 +83,8 @@ func init() {
 	}
 	anlogger.Debugf(nil, "update_settings.go : aws session was successfully initialized")
 
+	secretWord = apimodel.GetSecret(fmt.Sprintf(apimodel.SecretWordKeyBase, env), apimodel.SecretWordKeyName, awsSession, anlogger, nil)
+
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "update_settings.go : dynamodb client was successfully initialized")
 
@@ -107,8 +110,20 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	userId, ok, errStr := apimodel.FindUserId(reqParam.AccessToken, userProfileTable, awsDbClient, anlogger, lc)
+	userId, sessionToken, ok, errStr := apimodel.DecodeToken(reqParam.AccessToken, secretWord, anlogger, lc)
 	if !ok {
+		anlogger.Errorf(lc, "update_settings.go : return %s to client", errStr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+	}
+
+	valid, ok, errStr := apimodel.IsSessionValid(userId, sessionToken, userProfileTable, awsDbClient, anlogger, lc)
+	if !ok {
+		anlogger.Errorf(lc, "update_settings.go : return %s to client", errStr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+	}
+
+	if !valid {
+		errStr = apimodel.InvalidAccessTokenClientError
 		anlogger.Errorf(lc, "update_settings.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}

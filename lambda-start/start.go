@@ -165,23 +165,26 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	}
 
 	resp := apimodel.AuthResp{}
-	resp.CustomerId = resCustomerId
 
 	if wasCreated {
-		anlogger.Debugf(lc, "start.go : new userId was reserved, userId [%s] and sessionId [%s]", resUserId, resSessionId)
+		anlogger.Debugf(lc, "start.go : new userId was reserved, userId [%s], sessionId [%s] and customerId [%s]",
+			resUserId, resSessionId, resCustomerId)
+
 		resp.SessionId = resSessionId
+		resp.CustomerId = resCustomerId
 	} else {
-		newSessionId, ok, errStr := updateSessionId(userInfo.Phone, userInfo.SessionId, lc)
+		newSessionId, resUserId, resCustomerId, ok, errStr := updateSessionId(userInfo.Phone, userInfo.SessionId, lc)
 		if !ok {
 			anlogger.Errorf(lc, "start.go : return %s to client", errStr)
 			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 		}
 		resp.SessionId = newSessionId
-		anlogger.Debugf(lc, "start.go : userId for such phone [%s] was previously reserved, new sessionId [%s] was generated",
-			userInfo.Phone, resp.SessionId)
+		resp.CustomerId = resCustomerId
+		anlogger.Debugf(lc, "start.go : userId [%s] for such phone [%s] was previously reserved, new sessionId [%s] was generated, customerId [%s]",
+			resUserId, userInfo.Phone, resp.SessionId, resp.CustomerId)
 	}
 	//send analytics event
-	event := apimodel.NewUserAcceptTermsEvent(reqParam, sourceIp, resUserId)
+	event := apimodel.NewUserAcceptTermsEvent(reqParam, sourceIp, resUserId, resCustomerId)
 	apimodel.SendAnalyticEvent(event, resUserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	//send sms
@@ -226,8 +229,8 @@ func generateUserId(phone string, lc *lambdacontext.LambdaContext) (string, bool
 	return resultUserId, true, ""
 }
 
-//return updated sessionId, is everything ok and error string
-func updateSessionId(phone, sessionId string, lc *lambdacontext.LambdaContext) (string, bool, string) {
+//return updated sessionId, userId, customerId is everything ok and error string
+func updateSessionId(phone, sessionId string, lc *lambdacontext.LambdaContext) (string, string, string, bool, string) {
 	anlogger.Debugf(lc, "start.go : update sessionId [%s] for phone [%s]", sessionId, phone)
 
 	input :=
@@ -257,14 +260,16 @@ func updateSessionId(phone, sessionId string, lc *lambdacontext.LambdaContext) (
 	res, err := awsDbClient.UpdateItem(input)
 	if err != nil {
 		anlogger.Errorf(lc, "start.go : error while update sessionId [%s] for phone [%s] : %v", sessionId, phone, err)
-		return "", false, apimodel.InternalServerError
+		return "", "", "", false, apimodel.InternalServerError
 	}
 
-	resSessionId := *res.Attributes[apimodel.SessionIdColumnName].S
+	resultSessionId := *res.Attributes[apimodel.SessionIdColumnName].S
+	resultUserId := *res.Attributes[apimodel.UserIdColumnName].S
+	resultCustomerId := *res.Attributes[apimodel.CustomerIdColumnName].S
 
-	anlogger.Debugf(lc, "start.go : successfully update sessionId [%s] for phone [%s]", resSessionId, phone)
+	anlogger.Debugf(lc, "start.go : successfully update sessionId [%s] for phone [%s], userId [%s] and customerId [%s]", resultSessionId, phone, resultUserId, resultCustomerId)
 
-	return resSessionId, true, ""
+	return resultSessionId, resultUserId, resultCustomerId, true, ""
 }
 
 //return userId, sessionId,  was user created, was everything ok and error string
