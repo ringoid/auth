@@ -13,6 +13,8 @@ build:
 	GOOS=linux go build lambda-update-settings/update_settings.go
 	@echo '--- Building get-settings-auth function ---'
 	GOOS=linux go build lambda-get-settings/get_settings.go
+	@echo '--- Building logout-auth function ---'
+	GOOS=linux go build lambda-logout/logout.go
 
 zip_lambda: build
 	@echo '--- Zip start-auth function ---'
@@ -27,6 +29,8 @@ zip_lambda: build
 	zip update-settings-auth.zip ./update_settings
 	@echo '--- Zip get-settings-auth function ---'
 	zip get-settings-auth.zip ./get_settings
+	@echo '--- Zip logout-auth function ---'
+	zip logout-auth.zip ./logout
 
 stage-deploy: zip_lambda
 	@echo '--- Build lambda stage ---'
@@ -50,4 +54,6 @@ clean:
 	rm -rf update_settings
 	rm -rf get-settings-auth.zip
 	rm -rf get_settings
+	rm -rf logout-auth.zip
+	rm -rf logout
 

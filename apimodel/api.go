@@ -103,3 +103,11 @@ func (resp GetSettingsResp) String() string {
 	return fmt.Sprintf("[GetSettingsResp={whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%s}]",
 		resp.WhoCanSeePhoto, resp.SafeDistanceInMeter, resp.PushMessages, resp.PushMatches, resp.PushLikes)
 }
+
+type LogoutReq struct {
+	AccessToken string `json:"accessToken"`
+}
+
+func (req LogoutReq) String() string {
+	return fmt.Sprintf("[LogoutReq={accessToken=%s}]", req.AccessToken)
+}

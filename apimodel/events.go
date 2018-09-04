@@ -116,3 +116,21 @@ func NewUserSettingsUpdatedEvent(settings *UserSettings) *UserSettingsUpdatedEve
 		EventType:           "AUTH_USER_SETTINGS_UPDATED",
 	}
 }
+
+type UserLogoutEvent struct {
+	UserId    string `json:"userId"`
+	UnixTime  int64  `json:"unixTime"`
+	EventType string `json:"eventType"`
+}
+
+func (event UserLogoutEvent) String() string {
+	return fmt.Sprintf("[UserLogoutEvent={userId=%s, unixTime=%d, eventType=%s}]", event.UserId, event.UnixTime, event.EventType)
+}
+
+func NewUserLogoutEvent(userId string) *UserLogoutEvent {
+	return &UserLogoutEvent{
+		UserId:    userId,
+		UnixTime:  time.Now().Unix(),
+		EventType: "AUTH_USER_LOGOUT",
+	}
+}

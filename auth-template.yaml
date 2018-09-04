@@ -226,6 +226,25 @@ Resources:
       Policies:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
+
+  LogoutAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Join [ "-", [ !Ref Env, logout-auth] ]
+      Handler: logout
+      CodeUri: ./logout-auth.zip
+      Description: Logout auth function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - SecretsManagerReadWrite
+        - AmazonKinesisFirehoseFullAccess
+      Events:
+        StartEvent:
+          Type: Api
+          Properties:
+            Path: /logout
+            Method: post
+
   UserProfileTable:
     Type: AWS::DynamoDB::Table
     Properties:

@@ -152,6 +152,36 @@ Possible errorCodes:
 * WrongRequestParamsClientError
 * InvalidAccessTokenClientError
 
+### Logout user
+
+* url ``https://{API ENDPOINT}/Prod/logout``
+
+POST request
+
+Headers:
+
+* Content-Type : application/json
+
+Body
+
+    {
+        "accessToken":"adasdasd-fadfs-sdffd"
+    }
+
+    
+ Response Body:
+ 
+    {
+        "errorCode":"",
+        "errorMessage":""
+    }
+    
+Possible errorCodes:
+
+* InternalServerError
+* WrongRequestParamsClientError
+* InvalidAccessTokenClientError
+
 ### Get user's settings
 
 * url ``https://{API ENDPOINT}/Prod/get_settings?accessToken={ACCESS TOKEN}``
