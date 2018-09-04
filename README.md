@@ -259,3 +259,11 @@ Possible errorCodes:
 * eventType - string (AUTH_USER_SETTINGS_UPDATED)
 
 `{"userId":"aslkdl-asfmfa-asd","whoCanSeePhoto":"OPPOSITE","safeDistanceInMeter":0,"pushMessages":true,"pushMatches":true,"pushLikes":"EVERY","unixTime":1534338646,"inAppMessages":true, "inAppMatches":true, "inAppLikes":"EVERY", "eventType":"AUTH_USER_SETTINGS_UPDATED"}`
+
+5. AUTH_USER_LOGOUT
+
+* userId - string
+* unixTime - int
+* eventType - string (AUTH_USER_LOGOUT)
+
+`{"userId":"aslkdl-asfmfa-asd", "unixTime":1534338646, "eventType":"AUTH_USER_LOGOUT"}`
