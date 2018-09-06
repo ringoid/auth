@@ -156,7 +156,8 @@ func getUserSettings(userId string, lc *lambdacontext.LambdaContext) (*apimodel.
 				S: aws.String(userId),
 			},
 		},
-		TableName: aws.String(userSettingsTable),
+		ConsistentRead: aws.Bool(true),
+		TableName:      aws.String(userSettingsTable),
 	}
 
 	result, err := awsDbClient.GetItem(input)

@@ -68,12 +68,12 @@ func (req InternalGetUserIdReq) String() string {
 }
 
 type InternalGetUserIdResp struct {
-	Error  string `json:"error"`
+	BaseResponse
 	UserId string `json:"userId"`
 }
 
 func (resp InternalGetUserIdResp) String() string {
-	return fmt.Sprintf("[InternalGetUserIdResp={error=%s, userId=%s}]", resp.Error, resp.UserId)
+	return fmt.Sprintf("[%v, InternalGetUserIdResp={userId=%s}]", resp.BaseResponse, resp.UserId)
 }
 
 type UpdateSettingsReq struct {
@@ -100,8 +100,8 @@ type GetSettingsResp struct {
 }
 
 func (resp GetSettingsResp) String() string {
-	return fmt.Sprintf("[GetSettingsResp={whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%s}]",
-		resp.WhoCanSeePhoto, resp.SafeDistanceInMeter, resp.PushMessages, resp.PushMatches, resp.PushLikes)
+	return fmt.Sprintf("[%v, GetSettingsResp={whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%s}]",
+		resp.BaseResponse, resp.WhoCanSeePhoto, resp.SafeDistanceInMeter, resp.PushMessages, resp.PushMatches, resp.PushLikes)
 }
 
 type LogoutReq struct {

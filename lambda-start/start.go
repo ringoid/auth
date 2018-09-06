@@ -190,7 +190,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	//send sms
 	ok, errorStr := startVerify(userInfo.CountryCode, userInfo.PhoneNumber, reqParam.Locale, lc)
 	if !ok {
-		anlogger.Errorf(lc, "start.go : return %s to client", errStr)
+		anlogger.Errorf(lc, "start.go : return %s to client", errorStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
 	}
 
@@ -410,7 +410,7 @@ func startVerify(code int, number, locale string, lc *lambdacontext.LambdaContex
 
 		if errorCodeObject, ok := errorResp["error_code"]; ok {
 			if errorCodeStr, ok := errorCodeObject.(string); ok {
-				anlogger.Errorf(lc, "start.go : Twilio return error_code=%s, code [%d] and phone [%s] : %v", errorCodeStr, code, number, err)
+				anlogger.Errorf(lc, "start.go : Twilio return error_code=%s, code [%d] and phone [%s]", errorCodeStr, code, number, err)
 				switch errorCodeStr {
 				case "60033":
 					return false, apimodel.PhoneNumberClientError

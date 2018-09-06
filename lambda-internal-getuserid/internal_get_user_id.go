@@ -72,29 +72,28 @@ func handler(ctx context.Context, request apimodel.InternalGetUserIdReq) (apimod
 
 	anlogger.Debugf(lc, "internal_get_user_id.go : start handle request %v", request)
 
-	resp := apimodel.InternalGetUserIdResp{
-		Error:  "",
-		UserId: "",
-	}
+	resp := apimodel.InternalGetUserIdResp{}
 
 	userId, sessionToken, ok, errStr := apimodel.DecodeToken(request.AccessToken, secretWord, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", errStr)
-		resp.Error = errStr
+		resp.ErrorCode = "InternalServerError"
+		resp.ErrorMessage = "Internal Server Error"
 		return resp, nil
 	}
 
 	valid, ok, errStr := apimodel.IsSessionValid(userId, sessionToken, userProfileTable, awsDbClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", errStr)
-		resp.Error = errStr
+		resp.ErrorCode = "InternalServerError"
+		resp.ErrorMessage = "Internal Server Error"
 		return resp, nil
 	}
 
 	if !valid {
-		errStr = apimodel.InvalidAccessTokenClientError
-		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", errStr)
-		resp.Error = errStr
+		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", apimodel.InvalidAccessTokenClientError)
+		resp.ErrorCode = "InvalidAccessTokenClientError"
+		resp.ErrorMessage = "Invalid Access Token"
 		return resp, nil
 	}
 

@@ -124,7 +124,7 @@ type UserLogoutEvent struct {
 }
 
 func (event UserLogoutEvent) String() string {
-	return fmt.Sprintf("[UserLogoutEvent={userId=%s, unixTime=%d, eventType=%s}]", event.UserId, event.UnixTime, event.EventType)
+	return fmt.Sprintf("[UserLogoutEvent={userId=%s, unixTime=%v, eventType=%s}]", event.UserId, event.UnixTime, event.EventType)
 }
 
 func NewUserLogoutEvent(userId string) *UserLogoutEvent {

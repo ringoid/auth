@@ -50,7 +50,8 @@ func IsSessionValid(userId, sessionToken, userProfileTableName string, awsDbClie
 				S: aws.String(userId),
 			},
 		},
-		TableName: aws.String(userProfileTableName),
+		ConsistentRead: aws.Bool(true),
+		TableName:      aws.String(userProfileTableName),
 	}
 
 	result, err := awsDbClient.GetItem(input)

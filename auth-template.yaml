@@ -219,10 +219,10 @@ Resources:
   InternalGetUserIdFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Join [ "-", [ !Ref Env, internal-getuserid-auth] ]
+      FunctionName: !Join [ "-", [ !Ref Env, internal-validate-token-auth] ]
       Handler: internal_get_user_id
       CodeUri: ./internal-getuserid-auth.zip
-      Description: Internal function to get userId
+      Description: Internal function to get userId and validate AccessToken
       Policies:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
@@ -669,23 +669,6 @@ Resources:
 
 
 Outputs:
-
-  StartAuthApi:
-    Description: "API Gateway endpoint URL for Prod stage for start-auth function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/start_verification"
-
-  StartAuthFunction:
-      Description: "start-auth lambda function ARN"
-      Value: !GetAtt StartAuthFunction.Arn
-
-  CompleteAuthApi:
-    Description: "API Gateway endpoint URL for Prod stage for complete-auth function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/complete_verification"
-
-  CompleteAuthFunction:
-      Description: "complete-auth lambda function ARN"
-      Value: !GetAtt CompleteAuthFunction.Arn
-
   InternalGetUserIdFunctionExport:
     Value:
       Fn::GetAtt:
