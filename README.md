@@ -1,6 +1,6 @@
 # auth service
 
-### STAGE API ENDPOINT IS ``lewwnhue55.execute-api.eu-west-1.amazonaws.com``
+### STAGE API ENDPOINT IS ``mstyzyhb69.execute-api.eu-west-1.amazonaws.com``
 ### PROD API ENDPOINT IS ````
 
 ### Start auth
