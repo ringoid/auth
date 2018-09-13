@@ -57,6 +57,12 @@ Mappings:
       rcucrt: should-be-prod-value
       rcumin: should-be-prod-value
 
+  InternalGetUserIdFunctionNameMap:
+    stage:
+      name: stage-internal-validate-token-auth
+    prod:
+      name: prod-internal-validate-token-auth
+
 
 Parameters:
   Env:
@@ -82,9 +88,7 @@ Globals:
             USER_TABLE: !Ref UserTable
             USER_PROFILE_TABLE: !Ref UserProfileTable
             USER_SETTINGS_TABLE: !Ref UserSettingsTable
-            NEO4J_URL:
-              Fn::ImportValue:
-                !Join [ "-", [ !Ref Env, Neo4jLoadBalancerUrlExport] ]
+            NEO4J_URL: "bolt://34.254.205.98:7687"
 
         Tags:
           Company: Ringoid
@@ -219,7 +223,7 @@ Resources:
   InternalGetUserIdFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Join [ "-", [ !Ref Env, internal-validate-token-auth] ]
+      FunctionName: !FindInMap [InternalGetUserIdFunctionNameMap, !Ref Env, name]
       Handler: internal_get_user_id
       CodeUri: ./internal-getuserid-auth.zip
       Description: Internal function to get userId and validate AccessToken
@@ -670,9 +674,6 @@ Resources:
 
 Outputs:
   InternalGetUserIdFunctionExport:
-    Value:
-      Fn::GetAtt:
-        - InternalGetUserIdFunction
-        - Arn
+    Value: !FindInMap [InternalGetUserIdFunctionNameMap, !Ref Env, name]
     Export:
       Name: !Join [ "-", [ !Ref Env, InternalGetUserIdFunctionExport] ]
