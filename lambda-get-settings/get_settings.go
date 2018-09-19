@@ -21,7 +21,6 @@ var anlogger *syslog.Logger
 var awsDbClient *dynamodb.DynamoDB
 var userProfileTable string
 var userSettingsTable string
-var neo4jurl string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 var secretWord string
@@ -53,13 +52,6 @@ func init() {
 		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "get_settings.go.go : logger was successfully initialized")
-
-	neo4jurl, ok = os.LookupEnv("NEO4J_URL")
-	if !ok {
-		fmt.Printf("get_settings.go.go : env can not be empty NEO4J_URL")
-		os.Exit(1)
-	}
-	anlogger.Debugf(nil, "get_settings.go.go : start with NEO4J_URL = [%s]", neo4jurl)
 
 	userProfileTable, ok = os.LookupEnv("USER_PROFILE_TABLE")
 	if !ok {

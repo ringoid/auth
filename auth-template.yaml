@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Auth Service
+Description: Auth Service Stack
 
 
 Mappings:
@@ -88,8 +88,9 @@ Globals:
             USER_TABLE: !Ref UserTable
             USER_PROFILE_TABLE: !Ref UserProfileTable
             USER_SETTINGS_TABLE: !Ref UserSettingsTable
-            NEO4J_URL: "bolt://34.254.205.98:7687"
-
+            COMMON_STREAM:
+              Fn::ImportValue:
+                !Join [ "-", [ !Ref Env, CommonEventStreamExportName] ]
         Tags:
           Company: Ringoid
           Service: auth
@@ -177,6 +178,7 @@ Resources:
         - AmazonDynamoDBFullAccess
         - AmazonKinesisFirehoseFullAccess
         - SecretsManagerReadWrite
+        - AmazonKinesisFullAccess
       Events:
         CompleteEvent:
           Type: Api
@@ -195,6 +197,7 @@ Resources:
         - AmazonDynamoDBFullAccess
         - AmazonKinesisFirehoseFullAccess
         - SecretsManagerReadWrite
+        - AmazonKinesisFullAccess
       Events:
         CompleteEvent:
           Type: Api

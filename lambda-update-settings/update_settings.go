@@ -15,16 +15,18 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"strconv"
 	"github.com/aws/aws-lambda-go/lambdacontext"
+	"github.com/aws/aws-sdk-go/service/kinesis"
 )
 
 var anlogger *syslog.Logger
 var awsDbClient *dynamodb.DynamoDB
 var userProfileTable string
 var userSettingsTable string
-var neo4jurl string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 var secretWord string
+var commonStreamName string
+var awsKinesisClient *kinesis.Kinesis
 
 func init() {
 	var env string
@@ -54,13 +56,6 @@ func init() {
 	}
 	anlogger.Debugf(nil, "update_settings.go : logger was successfully initialized")
 
-	neo4jurl, ok = os.LookupEnv("NEO4J_URL")
-	if !ok {
-		fmt.Printf("update_settings.go : env can not be empty NEO4J_URL")
-		os.Exit(1)
-	}
-	anlogger.Debugf(nil, "update_settings.go : start with NEO4J_URL = [%s]", neo4jurl)
-
 	userProfileTable, ok = os.LookupEnv("USER_PROFILE_TABLE")
 	if !ok {
 		fmt.Printf("update_settings.go : env can not be empty USER_PROFILE_TABLE")
@@ -87,6 +82,16 @@ func init() {
 
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "update_settings.go : dynamodb client was successfully initialized")
+
+	commonStreamName, ok = os.LookupEnv("COMMON_STREAM")
+	if !ok {
+		anlogger.Fatalf(nil, "create.go : env can not be empty COMMON_STREAM")
+		os.Exit(1)
+	}
+	anlogger.Debugf(nil, "create.go : start with DELIVERY_STREAM = [%s]", commonStreamName)
+
+	awsKinesisClient = kinesis.New(awsSession)
+	anlogger.Debugf(nil, "create.go : kinesis client was successfully initialized")
 
 	deliveryStreamName, ok = os.LookupEnv("DELIVERY_STREAM")
 	if !ok {
@@ -138,6 +143,12 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	event := apimodel.NewUserSettingsUpdatedEvent(settings)
 	apimodel.SendAnalyticEvent(event, settings.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+
+	ok, errStr = apimodel.SendCommonEvent(event, userId, commonStreamName, awsKinesisClient, anlogger, lc)
+	if !ok {
+		anlogger.Errorf(lc, "update_settings.go : userId [%s], return %s to client", userId, errStr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+	}
 
 	resp := apimodel.BaseResponse{}
 	body, err := json.Marshal(resp)
