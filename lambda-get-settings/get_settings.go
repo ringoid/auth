@@ -46,7 +46,7 @@ func init() {
 	}
 	fmt.Printf("get_settings.go.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]", papertrailAddress)
 
-	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "update-settings-auth"))
+	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "get-settings-auth"))
 	if err != nil {
 		fmt.Errorf("get_settings.go.go : error during startup : %v", err)
 		os.Exit(1)
@@ -95,6 +95,10 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	lc, _ := lambdacontext.FromContext(ctx)
 
 	anlogger.Debugf(lc, "get_settings.go : start handle request %v", request)
+
+	if apimodel.IsItWarmUpRequest(request.Body, anlogger, lc) {
+		return events.APIGatewayProxyResponse{}, nil
+	}
 
 	accessToken := request.QueryStringParameters["accessToken"]
 

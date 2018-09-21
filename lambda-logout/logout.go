@@ -47,7 +47,7 @@ func init() {
 	}
 	fmt.Printf("logout.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]", papertrailAddress)
 
-	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "complete-auth"))
+	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "logout-auth"))
 	if err != nil {
 		fmt.Errorf("logout.go : error during startup : %v", err)
 		os.Exit(1)
@@ -96,6 +96,10 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	lc, _ := lambdacontext.FromContext(ctx)
 
 	anlogger.Debugf(lc, "logout.go : handle request %v", request)
+
+	if apimodel.IsItWarmUpRequest(request.Body, anlogger, lc) {
+		return events.APIGatewayProxyResponse{}, nil
+	}
 
 	reqParam, ok := parseParams(request.Body, lc)
 	if !ok {

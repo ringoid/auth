@@ -4,6 +4,14 @@ import (
 	"fmt"
 )
 
+type WarmUpRequest struct {
+	WarmUpRequest bool `json:"warmUpRequest"`
+}
+
+func (req WarmUpRequest) String() string {
+	return fmt.Sprintf("[WarmUpRequest={warmUpRequest=%s}]", req.WarmUpRequest)
+}
+
 //Request - Response model
 type AuthResp struct {
 	BaseResponse
@@ -16,6 +24,7 @@ func (resp AuthResp) String() string {
 }
 
 type StartReq struct {
+	WarmUpRequest              bool   `json:"warmUpRequest"`
 	CountryCallingCode         int    `json:"countryCallingCode"`
 	Phone                      string `json:"phone"`
 	ClientValidationFail       bool   `json:"clientValidationFail"`
@@ -31,6 +40,7 @@ func (req StartReq) String() string {
 }
 
 type VerifyReq struct {
+	WarmUpRequest    bool   `json:"warmUpRequest"`
 	SessionId        string `json:"sessionId"`
 	VerificationCode string `json:"verificationCode"`
 }
@@ -50,9 +60,10 @@ func (resp VerifyResp) GoString() string {
 }
 
 type CreateReq struct {
-	AccessToken string `json:"accessToken"`
-	YearOfBirth int    `json:"yearOfBirth"`
-	Sex         string `json:"sex"`
+	WarmUpRequest bool   `json:"warmUpRequest"`
+	AccessToken   string `json:"accessToken"`
+	YearOfBirth   int    `json:"yearOfBirth"`
+	Sex           string `json:"sex"`
 }
 
 func (req CreateReq) String() string {
@@ -60,6 +71,7 @@ func (req CreateReq) String() string {
 }
 
 type InternalGetUserIdReq struct {
+	WarmUpRequest bool   `json:"warmUpRequest"`
 	AccessToken string `json:"accessToken"`
 }
 
@@ -77,6 +89,7 @@ func (resp InternalGetUserIdResp) String() string {
 }
 
 type UpdateSettingsReq struct {
+	WarmUpRequest       bool   `json:"warmUpRequest"`
 	AccessToken         string `json:"accessToken"`
 	WhoCanSeePhoto      string `json:"whoCanSeePhoto"`      //OPPOSITE (default) || INCOGNITO || ONLY_ME
 	SafeDistanceInMeter int    `json:"safeDistanceInMeter"` // 0 (default for men) || 10 (default for women)
@@ -105,7 +118,8 @@ func (resp GetSettingsResp) String() string {
 }
 
 type LogoutReq struct {
-	AccessToken string `json:"accessToken"`
+	WarmUpRequest bool   `json:"warmUpRequest"`
+	AccessToken   string `json:"accessToken"`
 }
 
 func (req LogoutReq) String() string {

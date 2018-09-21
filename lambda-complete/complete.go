@@ -103,6 +103,10 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	anlogger.Debugf(lc, "complete.go : handle request %v", request)
 
+	if apimodel.IsItWarmUpRequest(request.Body, anlogger, lc) {
+		return events.APIGatewayProxyResponse{}, nil
+	}
+
 	reqParam, ok := parseParams(request.Body, lc)
 	if !ok {
 		errStr := apimodel.WrongRequestParamsClientError

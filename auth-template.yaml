@@ -57,12 +57,31 @@ Mappings:
       rcucrt: should-be-prod-value
       rcumin: should-be-prod-value
 
-  InternalGetUserIdFunctionNameMap:
-    stage:
-      name: stage-internal-validate-token-auth
-    prod:
-      name: prod-internal-validate-token-auth
-
+  FunctionName:
+    WarmUpFunction:
+      stage: stage-warm-up-auth
+      prod: prod-warm-up-auth
+    StartAuthFunction:
+      stage: stage-start-auth
+      prod: prod-start-auth
+    CompleteAuthFunction:
+      stage: stage-complete-auth
+      prod: prod-complete-auth
+    CreateAuthFunction:
+      stage: stage-create-auth
+      prod: prod-create-auth
+    UpdateSettingsAuthFunction:
+      stage: stage-update-settings-auth
+      prod: prod-update-settings-auth
+    GetSettingsAuthFunction:
+      stage: stage-get-settings-auth
+      prod: prod-get-settings-auth
+    InternalGetUserIdFunction:
+      stage: stage-internal-validate-token-auth
+      prod: prod-internal-validate-token-auth
+    LogoutAuthFunction:
+      stage: stage-logout-auth
+      prod: prod-logout-auth
 
 Parameters:
   Env:
@@ -91,6 +110,7 @@ Globals:
             COMMON_STREAM:
               Fn::ImportValue:
                 !Join [ "-", [ !Ref Env, CommonEventStreamExportName] ]
+            NEED_WARM_UP_LAMBDA_NAMES: !Join [ ",", [ !FindInMap [FunctionName, StartAuthFunction, !Ref Env], !FindInMap [FunctionName, CompleteAuthFunction, !Ref Env], !FindInMap [FunctionName, CreateAuthFunction, !Ref Env], !FindInMap [FunctionName, UpdateSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, GetSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, InternalGetUserIdFunction, !Ref Env], !FindInMap [FunctionName, LogoutAuthFunction, !Ref Env] ]]
         Tags:
           Company: Ringoid
           Service: auth
@@ -130,10 +150,47 @@ Resources:
                   - "cloudwatch:DeleteAlarms"
                 Resource: "*"
 
+  WarmUpFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !FindInMap [FunctionName, WarmUpFunction, !Ref Env]
+      Handler: warm_up
+      CodeUri: ./warmup-auth.zip
+      Description: WarmUp auth function
+      Policies:
+        - AWSLambdaFullAccess
+
+  ScheduledWarmUpFunctionRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Scheduled WarmUp lambda function rule
+      ScheduleExpression: rate(8 minutes)
+      State: ENABLED
+      Name: !Join [ "-", [ !Ref Env, warm_up_function_rule] ]
+      Targets:
+        -
+          Arn:
+            Fn::GetAtt:
+              - WarmUpFunction
+              - Arn
+          Id: ScheduledWarmUpFunctionRuleId
+
+  PermissionForEventsToInvokeWarmUpFunction:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WarmUpFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+          - ScheduledWarmUpFunctionRule
+          - Arn
+
+
   StartAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Join [ "-", [ !Ref Env, start-auth] ]
+      FunctionName: !FindInMap [FunctionName, StartAuthFunction, !Ref Env]
       Handler: start
       CodeUri: ./start-auth.zip
       Description: Start auth function
@@ -151,7 +208,7 @@ Resources:
   CompleteAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Join [ "-", [ !Ref Env, complete-auth] ]
+      FunctionName: !FindInMap [FunctionName, CompleteAuthFunction, !Ref Env]
       Handler: complete
       CodeUri: ./complete-auth.zip
       Description: Complete auth function
@@ -170,7 +227,7 @@ Resources:
   CreateAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Join [ "-", [ !Ref Env, create-auth] ]
+      FunctionName: !FindInMap [FunctionName, CreateAuthFunction, !Ref Env]
       Handler: create
       CodeUri: ./create-auth.zip
       Description: Create user profile auth function
@@ -189,7 +246,7 @@ Resources:
   UpdateSettingsAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Join [ "-", [ !Ref Env, update-settings-auth] ]
+      FunctionName: !FindInMap [FunctionName, UpdateSettingsAuthFunction, !Ref Env]
       Handler: update_settings
       CodeUri: ./update-settings-auth.zip
       Description: Update user's settings function
@@ -208,7 +265,7 @@ Resources:
   GetSettingsAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Join [ "-", [ !Ref Env, get-settings-auth] ]
+      FunctionName: !FindInMap [FunctionName, GetSettingsAuthFunction, !Ref Env]
       Handler: get_settings
       CodeUri: ./get-settings-auth.zip
       Description: Get user's settings function
@@ -226,7 +283,7 @@ Resources:
   InternalGetUserIdFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !FindInMap [InternalGetUserIdFunctionNameMap, !Ref Env, name]
+      FunctionName: !FindInMap [FunctionName, InternalGetUserIdFunction, !Ref Env]
       Handler: internal_get_user_id
       CodeUri: ./internal-getuserid-auth.zip
       Description: Internal function to get userId and validate AccessToken
@@ -237,7 +294,7 @@ Resources:
   LogoutAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Join [ "-", [ !Ref Env, logout-auth] ]
+      FunctionName: !FindInMap [FunctionName, LogoutAuthFunction, !Ref Env]
       Handler: logout
       CodeUri: ./logout-auth.zip
       Description: Logout auth function
@@ -677,6 +734,6 @@ Resources:
 
 Outputs:
   InternalGetUserIdFunctionExport:
-    Value: !FindInMap [InternalGetUserIdFunctionNameMap, !Ref Env, name]
+    Value: !FindInMap [FunctionName, InternalGetUserIdFunction, !Ref Env]
     Export:
       Name: !Join [ "-", [ !Ref Env, InternalGetUserIdFunctionExport] ]

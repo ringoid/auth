@@ -39,7 +39,7 @@ func init() {
 	}
 	fmt.Printf("internal_get_user_id.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]", papertrailAddress)
 
-	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "create-auth"))
+	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "internal-get-user-id-auth"))
 	if err != nil {
 		fmt.Errorf("internal_get_user_id.go : error during startup : %v", err)
 		os.Exit(1)
@@ -71,6 +71,10 @@ func handler(ctx context.Context, request apimodel.InternalGetUserIdReq) (apimod
 	lc, _ := lambdacontext.FromContext(ctx)
 
 	anlogger.Debugf(lc, "internal_get_user_id.go : start handle request %v", request)
+
+	if request.WarmUpRequest {
+		return apimodel.InternalGetUserIdResp{}, nil
+	}
 
 	resp := apimodel.InternalGetUserIdResp{}
 
