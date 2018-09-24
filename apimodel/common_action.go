@@ -63,6 +63,11 @@ func IsSessionValid(userId, sessionToken, userProfileTableName string, awsDbClie
 		return false, false, InternalServerError
 	}
 
+	if len(result.Item) == 0 {
+		anlogger.Warnf(lc, "common_action.go : there is no user with such userId [%s], sessionToken [%s]", userId, sessionToken)
+		return false, true, ""
+	}
+
 	lastSessionToken := *result.Item[SessionTokenColumnName].S
 	if sessionToken != lastSessionToken {
 		anlogger.Warnf(lc, "common_action.go : sessionToken [%s] expired for userId [%s]", sessionToken, userId)
