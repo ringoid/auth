@@ -14,8 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"encoding/json"
 	"github.com/aws/aws-lambda-go/events"
-	"net/http"
-	"io/ioutil"
 	"github.com/satori/go.uuid"
 	"time"
 	"github.com/aws/aws-lambda-go/lambdacontext"
@@ -30,6 +28,8 @@ var userTableName string
 var userProfileTable string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
+var nexmoApiKey string
+var nexmoApiSecret string
 
 func init() {
 	var env string
@@ -83,6 +83,8 @@ func init() {
 
 	twilioKey = apimodel.GetSecret(fmt.Sprintf(apimodel.TwilioSecretKeyBase, env), apimodel.TwilioApiKeyName, awsSession, anlogger, nil)
 	secretWord = apimodel.GetSecret(fmt.Sprintf(apimodel.SecretWordKeyBase, env), apimodel.SecretWordKeyName, awsSession, anlogger, nil)
+	nexmoApiKey = apimodel.GetSecret(fmt.Sprintf(apimodel.NexmoSecretKeyBase, env), apimodel.NexmoApiKeyName, awsSession, anlogger, nil)
+	nexmoApiSecret = apimodel.GetSecret(fmt.Sprintf(apimodel.NexmoApiSecretKeyBase, env), apimodel.NexmoApiSecretKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "complete.go : dynamodb client was successfully initialized")
@@ -120,10 +122,24 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	ok, errStr = completeVerify(userInfo, reqParam.VerificationCode, lc)
-	if !ok {
-		anlogger.Errorf(lc, "complete.go : userId [%s], return %s to client", userInfo.UserId, errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+	switch userInfo.VerifyProvider {
+	case apimodel.Twilio:
+		ok, errStr = apimodel.CompleteTwilioVerify(userInfo, reqParam.VerificationCode, twilioKey, anlogger, lc)
+		if !ok {
+			anlogger.Errorf(lc, "complete.go : userId [%s], return %s to client", userInfo.UserId, errStr)
+			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		}
+	case apimodel.Nexmo:
+		ok, errStr = apimodel.CompleteNexmoVerify(userInfo, reqParam.VerificationCode, nexmoApiKey, nexmoApiSecret, anlogger, lc)
+		if !ok {
+			anlogger.Errorf(lc, "complete.go : userId [%s], return %s to client", userInfo.UserId, errStr)
+			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		}
+	default:
+		errorStr := apimodel.InternalServerError
+		anlogger.Errorf(lc, "complete.go : unsupported verify provider [%s]", userInfo.VerifyProvider)
+		anlogger.Errorf(lc, "complete.go : return %s to client", errorStr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
 	}
 
 	event := apimodel.NewUserVerificationCompleteEvent(userInfo.UserId)
@@ -205,71 +221,6 @@ func updateSessionToken(userId, sessionToken string, lc *lambdacontext.LambdaCon
 	return ok, true, ""
 }
 
-//return ok and error string if not
-func completeVerify(userInfo *apimodel.UserInfo, verificationCode string, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "complete.go : verify phone for userId [%s], userInfo=%v", userInfo.UserId, userInfo)
-
-	url := fmt.Sprintf("https://api.authy.com/protected/json/phones/verification/check?phone_number=%s&country_code=%d&verification_code=%s",
-		userInfo.PhoneNumber, userInfo.CountryCode, verificationCode)
-
-	req, err := http.NewRequest("GET", url, nil)
-
-	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error while construct the request, userId [%s] : %v", userInfo.UserId, err)
-		return false, apimodel.InternalServerError
-	}
-
-	req.Header.Set("X-Authy-API-Key", twilioKey)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	client := &http.Client{}
-
-	anlogger.Debugf(lc, "complete.go : make GET request by url %s, userId [%s]", url, userInfo.UserId)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		anlogger.Fatalf(lc, "complete.go : error while making GET request, userId [%s] : %v", userInfo.UserId, err)
-		return false, apimodel.InternalServerError
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error reading response body from Twilio, userId [%s] : %v", userInfo.UserId, err)
-		return false, apimodel.InternalServerError
-	}
-	anlogger.Debugf(lc, "complete.go : receive response from Twilio, body=%s, userId [%s]", string(body), userInfo.UserId)
-	if resp.StatusCode != 200 {
-		anlogger.Errorf(lc, "complete.go : error while sending sms, status %v, body %v, userId [%s]",
-			resp.StatusCode, string(body), userInfo.UserId)
-
-		var errorResp map[string]interface{}
-		err := json.Unmarshal(body, &errorResp)
-		if err != nil {
-			anlogger.Errorf(lc, "complete.go : error parsing Twilio response, body=%s, userId [%s] : %v", body, userInfo.UserId, err)
-			return false, apimodel.InternalServerError
-		}
-
-		if errorCodeObject, ok := errorResp["error_code"]; ok {
-			if errorCodeStr, ok := errorCodeObject.(string); ok {
-				anlogger.Errorf(lc, "complete.go : error verify phone, error_code=%s, userId [%s]", errorCodeStr, userInfo.UserId)
-				switch errorCodeStr {
-				case "60023":
-					return false, apimodel.NoPendingVerificationClientError
-				case "60022":
-					return false, apimodel.WrongVerificationCodeClientError
-				}
-			}
-		}
-
-		return false, apimodel.InternalServerError
-	}
-
-	anlogger.Debugf(lc, "complete.go : successfully complete verification for userId [%s], userInfo=%v",
-		userInfo.UserId, userInfo)
-	return true, ""
-}
-
 func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.VerifyReq, bool) {
 	var req apimodel.VerifyReq
 	err := json.Unmarshal([]byte(params), &req)
@@ -333,13 +284,25 @@ func fetchBySessionId(sessionId string, lc *lambdacontext.LambdaContext) (*apimo
 	}
 	customerId := *res.Items[0][apimodel.CustomerIdColumnName].S
 
+	var provider string
+	if providerAttr, ok := res.Items[0][apimodel.VerifyProviderColumnName]; ok {
+		provider = *providerAttr.S
+	}
+
+	var requestId string
+	if requestIdAttr, ok := res.Items[0][apimodel.VerifyRequestIdColumnName]; ok {
+		requestId = *requestIdAttr.S
+	}
+
 	userInfo := &apimodel.UserInfo{
-		UserId:      userId,
-		SessionId:   sessId,
-		Phone:       phone,
-		CountryCode: countryCode,
-		PhoneNumber: phonenumber,
-		CustomerId:  customerId,
+		UserId:          userId,
+		SessionId:       sessId,
+		Phone:           phone,
+		CountryCode:     countryCode,
+		PhoneNumber:     phonenumber,
+		CustomerId:      customerId,
+		VerifyProvider:  provider,
+		VerifyRequestId: requestId,
 	}
 
 	anlogger.Debugf(lc, "complete.go : successfully fetch userInfo %v by sessionId [%s]", userInfo, sessionId)

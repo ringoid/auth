@@ -273,6 +273,7 @@ Resources:
         - AmazonDynamoDBFullAccess
         - AmazonKinesisFirehoseFullAccess
         - SecretsManagerReadWrite
+        - AmazonKinesisFullAccess
       Events:
         CompleteEvent:
           Type: Api
@@ -290,6 +291,7 @@ Resources:
       Policies:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
+        - AmazonKinesisFullAccess
 
   LogoutAuthFunction:
     Type: AWS::Serverless::Function
@@ -302,6 +304,7 @@ Resources:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
         - AmazonKinesisFirehoseFullAccess
+        - AmazonKinesisFullAccess
       Events:
         StartEvent:
           Type: Api

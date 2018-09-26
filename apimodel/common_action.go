@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/aws/aws-lambda-go/events"
+	"time"
 )
 
 //return userId, sessionToken, ok, error string
@@ -126,6 +127,7 @@ func SendCommonEvent(event interface{}, userId, commonStreamName string, awsKine
 }
 
 func GetSecret(secretBase, secretKeyName string, awsSession *session.Session, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) string {
+	anlogger.Debugf(lc, "common_action.go : read secret with secretBase [%s], secretKeyName [%s]", secretBase, secretKeyName)
 	svc := secretsmanager.New(awsSession)
 	input := &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(secretBase),
@@ -198,4 +200,73 @@ func IsItWarmUpRequest(body string, anlogger *syslog.Logger, lc *lambdacontext.L
 	result := req.WarmUpRequest
 	anlogger.Debugf(lc, "common_action.go : successfully check that it's warm up request, body [%s], result [%v]", body, result)
 	return result
+}
+
+//return ok and error string
+func UpdateLastOnlineTime(userId, userProfileTableName string, awsDbClient *dynamodb.DynamoDB, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "common_action.go : update last online time for userId [%s]", userId)
+
+	input :=
+		&dynamodb.UpdateItemInput{
+			ExpressionAttributeNames: map[string]*string{
+				"#onlineTime": aws.String(LastOnlineTimeColumnName),
+			},
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":onlineTimeV": {
+					N: aws.String(fmt.Sprintf("%v", time.Now().Unix())),
+				},
+			},
+			Key: map[string]*dynamodb.AttributeValue{
+				UserIdColumnName: {
+					S: aws.String(userId),
+				},
+			},
+			TableName:        aws.String(userProfileTableName),
+			UpdateExpression: aws.String("SET #onlineTime = :onlineTimeV"),
+		}
+
+	_, err := awsDbClient.UpdateItem(input)
+	if err != nil {
+		anlogger.Errorf(lc, "common_action.go : error while update last online time for userId [%s] : %v", userId, err)
+		return false, InternalServerError
+	}
+
+	anlogger.Debugf(lc, "common_action.go : successfully update last online time for userId [%s]", userId)
+
+	return true, ""
+}
+
+//return userId, ok and error string
+func Login(token, secretWord, userProfileTable, commonStreamName string, awsDbClient *dynamodb.DynamoDB, awsKinesisClient *kinesis.Kinesis,
+	anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (string, bool, string) {
+
+	anlogger.Debugf(lc, "common_action.go : login for token [%s]", token)
+
+	userId, sessionToken, ok, errStr := DecodeToken(token, secretWord, anlogger, lc)
+	if !ok {
+		return "", ok, errStr
+	}
+
+	valid, ok, errStr := IsSessionValid(userId, sessionToken, userProfileTable, awsDbClient, anlogger, lc)
+	if !ok {
+		return "", ok, errStr
+	}
+
+	if !valid {
+		return "", false, InvalidAccessTokenClientError
+	}
+
+	ok, errStr = UpdateLastOnlineTime(userId, userProfileTable, awsDbClient, anlogger, lc)
+	if !ok {
+		return "", ok, errStr
+	}
+
+	event := NewUserOnlineEvent(userId)
+	ok, errStr = SendCommonEvent(event, userId, commonStreamName, awsKinesisClient, anlogger, lc)
+	if !ok {
+		return "", ok, errStr
+	}
+
+	anlogger.Debugf(lc, "common_action.go : successfully login for token [%s]", token)
+	return userId, true, ""
 }

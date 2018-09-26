@@ -6,15 +6,17 @@ type UserInfo struct {
 	UserId    string
 	SessionId string
 	//full phone with country code included
-	Phone       string
-	CountryCode int
-	PhoneNumber string
-	CustomerId  string
+	Phone           string
+	CountryCode     int
+	PhoneNumber     string
+	CustomerId      string
+	VerifyProvider  string
+	VerifyRequestId string
 }
 
 func (model UserInfo) String() string {
-	return fmt.Sprintf("[UserInfo={userId=%s, sessionId=%s, countryCode=%d, phoneNumber=%s, customerId=%s}]",
-		model.UserId, model.SessionId, model.CountryCode, model.PhoneNumber, model.CustomerId)
+	return fmt.Sprintf("[UserInfo={userId=%s, sessionId=%s, countryCode=%d, phoneNumber=%s, customerId=%s, verifyProvider=%s, verifyRequestId=%s}]",
+		model.UserId, model.SessionId, model.CountryCode, model.PhoneNumber, model.CustomerId, model.VerifyProvider, model.VerifyRequestId)
 }
 
 type UserSettings struct {

@@ -119,20 +119,8 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	userId, sessionToken, ok, errStr := apimodel.DecodeToken(reqParam.AccessToken, secretWord, anlogger, lc)
+	userId, ok, errStr := apimodel.Login(reqParam.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
-		anlogger.Errorf(lc, "update_settings.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
-	}
-
-	valid, ok, errStr := apimodel.IsSessionValid(userId, sessionToken, userProfileTable, awsDbClient, anlogger, lc)
-	if !ok {
-		anlogger.Errorf(lc, "update_settings.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
-	}
-
-	if !valid {
-		errStr = apimodel.InvalidAccessTokenClientError
 		anlogger.Errorf(lc, "update_settings.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}

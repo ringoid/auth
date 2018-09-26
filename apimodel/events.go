@@ -134,3 +134,22 @@ func NewUserLogoutEvent(userId string) *UserLogoutEvent {
 		EventType: "AUTH_USER_LOGOUT",
 	}
 }
+
+//it's not analytics event
+type UserOnlineEvent struct {
+	UserId    string `json:"userId"`
+	UnixTime  int64  `json:"unixTime"`
+	EventType string `json:"eventType"`
+}
+
+func (event UserOnlineEvent) String() string {
+	return fmt.Sprintf("[UserOnlineEvent={userId=%s, unixTime=%v, eventType=%s}]", event.UserId, event.UnixTime, event.EventType)
+}
+
+func NewUserOnlineEvent(userId string) *UserOnlineEvent {
+	return &UserOnlineEvent{
+		UserId:    userId,
+		UnixTime:  time.Now().Unix(),
+		EventType: "AUTH_USER_ONLINE",
+	}
+}

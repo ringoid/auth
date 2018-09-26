@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"strconv"
 	"github.com/aws/aws-lambda-go/lambdacontext"
+	"github.com/aws/aws-sdk-go/service/kinesis"
 )
 
 var anlogger *syslog.Logger
@@ -24,6 +25,8 @@ var userSettingsTable string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 var secretWord string
+var commonStreamName string
+var awsKinesisClient *kinesis.Kinesis
 
 func init() {
 	var env string
@@ -89,6 +92,16 @@ func init() {
 
 	awsDeliveryStreamClient = firehose.New(awsSession)
 	anlogger.Debugf(nil, "get_settings.go.go : firehose client was successfully initialized")
+
+	commonStreamName, ok = os.LookupEnv("COMMON_STREAM")
+	if !ok {
+		anlogger.Fatalf(nil, "get_settings.go : env can not be empty COMMON_STREAM")
+		os.Exit(1)
+	}
+	anlogger.Debugf(nil, "get_settings.go : start with COMMON_STREAM = [%s]", commonStreamName)
+
+	awsKinesisClient = kinesis.New(awsSession)
+	anlogger.Debugf(nil, "get_settings.go : kinesis client was successfully initialized")
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -102,20 +115,8 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	accessToken := request.QueryStringParameters["accessToken"]
 
-	userId, sessionToken, ok, errStr := apimodel.DecodeToken(accessToken, secretWord, anlogger, lc)
+	userId, ok, errStr := apimodel.Login(accessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
-		anlogger.Errorf(lc, "get_settings.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
-	}
-
-	valid, ok, errStr := apimodel.IsSessionValid(userId, sessionToken, userProfileTable, awsDbClient, anlogger, lc)
-	if !ok {
-		anlogger.Errorf(lc, "get_settings.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
-	}
-
-	if !valid {
-		errStr = apimodel.InvalidAccessTokenClientError
 		anlogger.Errorf(lc, "get_settings.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}

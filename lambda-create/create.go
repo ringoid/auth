@@ -97,7 +97,7 @@ func init() {
 		anlogger.Fatalf(nil, "create.go : env can not be empty COMMON_STREAM")
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "create.go : start with DELIVERY_STREAM = [%s]", commonStreamName)
+	anlogger.Debugf(nil, "create.go : start with COMMON_STREAM = [%s]", commonStreamName)
 
 	awsDeliveryStreamClient = firehose.New(awsSession)
 	anlogger.Debugf(nil, "create.go : firehose client was successfully initialized")
@@ -121,20 +121,8 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	userId, sessionToken, ok, errStr := apimodel.DecodeToken(reqParam.AccessToken, secretWord, anlogger, lc)
+	userId, ok, errStr := apimodel.Login(reqParam.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
-		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
-	}
-
-	valid, ok, errStr := apimodel.IsSessionValid(userId, sessionToken, userProfileTable, awsDbClient, anlogger, lc)
-	if !ok {
-		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
-	}
-
-	if !valid {
-		errStr = apimodel.InvalidAccessTokenClientError
 		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}

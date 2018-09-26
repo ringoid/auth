@@ -3,16 +3,12 @@ package main
 import (
 	"context"
 	basicLambda "github.com/aws/aws-lambda-go/lambda"
-	"net/http"
 	"fmt"
-	"io/ioutil"
-	"strings"
 	"os"
 	"../sys_log"
 	"github.com/aws/aws-lambda-go/events"
 	"../apimodel"
 	"encoding/json"
-	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
@@ -31,6 +27,8 @@ var awsDbClient *dynamodb.DynamoDB
 var userTableName string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
+var nexmoApiKey string
+var nexmoApiSecret string
 
 func init() {
 	var env string
@@ -38,7 +36,6 @@ func init() {
 	var papertrailAddress string
 	var err error
 	var awsSession *session.Session
-	var twilioSecretKeyName string
 
 	env, ok = os.LookupEnv("ENV")
 	if !ok {
@@ -76,27 +73,9 @@ func init() {
 	}
 	anlogger.Debugf(nil, "start.go : aws session was successfully initialized")
 
-	twilioSecretKeyName = fmt.Sprintf(apimodel.TwilioSecretKeyBase, env)
-	svc := secretsmanager.New(awsSession)
-	input := &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(twilioSecretKeyName),
-	}
-
-	result, err := svc.GetSecretValue(input)
-	if err != nil {
-		anlogger.Fatalf(nil, "start.go : error reading [%s] secret from Secret Manager : %v", twilioSecretKeyName, err)
-	}
-	var secretMap map[string]string
-	decoder := json.NewDecoder(strings.NewReader(*result.SecretString))
-	err = decoder.Decode(&secretMap)
-	if err != nil {
-		anlogger.Fatalf(nil, "start.go : error decode [%s] secret from Secret Manager : %v", twilioSecretKeyName, err)
-	}
-	twilioKey, ok = secretMap[apimodel.TwilioApiKeyName]
-	if !ok {
-		anlogger.Fatalln(nil, "start.go : Twilio Api Key is empty")
-	}
-	anlogger.Debugf(nil, "start.go : Twilio Api Key was successfully initialized")
+	twilioKey = apimodel.GetSecret(fmt.Sprintf(apimodel.TwilioSecretKeyBase, env), apimodel.TwilioApiKeyName, awsSession, anlogger, nil)
+	nexmoApiKey = apimodel.GetSecret(fmt.Sprintf(apimodel.NexmoSecretKeyBase, env), apimodel.NexmoApiKeyName, awsSession, anlogger, nil)
+	nexmoApiSecret = apimodel.GetSecret(fmt.Sprintf(apimodel.NexmoApiSecretKeyBase, env), apimodel.NexmoApiSecretKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "start.go : dynamodb client was successfully initialized")
@@ -153,13 +132,20 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: strErr}, nil
 	}
 
+	provider, ok := apimodel.RoutingRuleMap[reqParam.CountryCallingCode]
+	if !ok {
+		provider = apimodel.Nexmo
+	}
+	anlogger.Debugf(lc, "start.go : chose verify provide [%s] for userId [%s]", provider, userId)
+
 	userInfo := &apimodel.UserInfo{
-		UserId:      userId,
-		SessionId:   sessionId.String(),
-		Phone:       fullPhone,
-		CountryCode: reqParam.CountryCallingCode,
-		PhoneNumber: reqParam.Phone,
-		CustomerId:  customerId.String(),
+		UserId:         userId,
+		SessionId:      sessionId.String(),
+		Phone:          fullPhone,
+		CountryCode:    reqParam.CountryCallingCode,
+		PhoneNumber:    reqParam.Phone,
+		CustomerId:     customerId.String(),
+		VerifyProvider: provider,
 	}
 
 	resUserId, resSessionId, resCustomerId, wasCreated, ok, errStr := createUserInfo(userInfo, lc)
@@ -177,11 +163,13 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		resp.SessionId = resSessionId
 		resp.CustomerId = resCustomerId
 	} else {
-		newSessionId, resUserId, resCustomerId, ok, errStr := updateSessionId(userInfo.Phone, userInfo.SessionId, lc)
+		newSessionId, resultUserId, resCustomerId, ok, errStr := updateSessionId(userInfo.Phone, userInfo.SessionId, userInfo.VerifyProvider, lc)
 		if !ok {
 			anlogger.Errorf(lc, "start.go : return %s to client", errStr)
 			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 		}
+		//we need this coz scope of resultUserId
+		resUserId = resultUserId
 		resp.SessionId = newSessionId
 		resp.CustomerId = resCustomerId
 		anlogger.Debugf(lc, "start.go : userId [%s] for such phone [%s] was previously reserved, new sessionId [%s] was generated, customerId [%s]",
@@ -192,8 +180,27 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	apimodel.SendAnalyticEvent(event, resUserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	//send sms
-	ok, errorStr := startVerify(userInfo.CountryCode, userInfo.PhoneNumber, reqParam.Locale, lc)
-	if !ok {
+	switch userInfo.VerifyProvider {
+	case apimodel.Twilio:
+		ok, errorStr := apimodel.StartTwilioVerify(userInfo.CountryCode, userInfo.PhoneNumber, reqParam.Locale, twilioKey, anlogger, lc)
+		if !ok {
+			anlogger.Errorf(lc, "start.go : return %s to client", errorStr)
+			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
+		}
+	case apimodel.Nexmo:
+		requestId, ok, errorStr := apimodel.StartNexmoVerify(userInfo.CountryCode, userInfo.PhoneNumber, nexmoApiKey, nexmoApiSecret, "Ringoid", userInfo.UserId, anlogger, lc)
+		if !ok {
+			anlogger.Errorf(lc, "start.go : return %s to client", errorStr)
+			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
+		}
+		ok, errorStr = updateRequestId(userInfo.Phone, requestId, userInfo.UserId, lc)
+		if !ok {
+			anlogger.Errorf(lc, "start.go : return %s to client", errorStr)
+			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
+		}
+	default:
+		errorStr := apimodel.InternalServerError
+		anlogger.Errorf(lc, "start.go : unsupported verify provider [%s]", userInfo.VerifyProvider)
 		anlogger.Errorf(lc, "start.go : return %s to client", errorStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
 	}
@@ -234,18 +241,69 @@ func generateUserId(phone string, lc *lambdacontext.LambdaContext) (string, bool
 }
 
 //return updated sessionId, userId, customerId is everything ok and error string
-func updateSessionId(phone, sessionId string, lc *lambdacontext.LambdaContext) (string, string, string, bool, string) {
-	anlogger.Debugf(lc, "start.go : update sessionId [%s] for phone [%s]", sessionId, phone)
+func updateSessionId(phone, sessionId, provider string, lc *lambdacontext.LambdaContext) (string, string, string, bool, string) {
+	anlogger.Debugf(lc, "start.go : update sessionId [%s], provider [%s] for phone [%s]", sessionId, provider, phone)
 
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
 				"#sessionId": aws.String(apimodel.SessionIdColumnName),
 				"#time":      aws.String(apimodel.UpdatedTimeColumnName),
+				"#provider":  aws.String(apimodel.VerifyProviderColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":sV": {
 					S: aws.String(fmt.Sprint(sessionId)),
+				},
+				":tV": {
+					S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
+				},
+				":providerV": {
+					S: aws.String(provider),
+				},
+			},
+			Key: map[string]*dynamodb.AttributeValue{
+				apimodel.PhoneColumnName: {
+					S: aws.String(phone),
+				},
+			},
+			TableName:        aws.String(userTableName),
+			UpdateExpression: aws.String("SET #sessionId = :sV, #time = :tV, #provider = :providerV"),
+			ReturnValues:     aws.String("ALL_NEW"),
+		}
+
+	res, err := awsDbClient.UpdateItem(input)
+	if err != nil {
+		anlogger.Errorf(lc, "start.go : error while update sessionId [%s], provider [%s] for phone [%s] : %v", sessionId, provider, phone, err)
+		return "", "", "", false, apimodel.InternalServerError
+	}
+
+	resultSessionId := *res.Attributes[apimodel.SessionIdColumnName].S
+	resultUserId := *res.Attributes[apimodel.UserIdColumnName].S
+	resultCustomerId := *res.Attributes[apimodel.CustomerIdColumnName].S
+
+	anlogger.Debugf(lc, "start.go : successfully update sessionId [%s], provider [%s] for phone [%s], userId [%s] and customerId [%s]", resultSessionId, provider, phone, resultUserId, resultCustomerId)
+
+	return resultSessionId, resultUserId, resultCustomerId, true, ""
+}
+
+//return ok and error string
+func updateRequestId(phone, requestId, userId string, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "start.go : update request id [%s], for phone [%s] for userId [%s]", requestId, phone, userId)
+	if len(requestId) == 0 {
+		anlogger.Debugf(lc, "start.go : update request id with empty value not allowed, userId [%s], return", userId)
+		return true, ""
+	}
+
+	input :=
+		&dynamodb.UpdateItemInput{
+			ExpressionAttributeNames: map[string]*string{
+				"#requestId": aws.String(apimodel.VerifyRequestIdColumnName),
+				"#time":      aws.String(apimodel.UpdatedTimeColumnName),
+			},
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":rV": {
+					S: aws.String(fmt.Sprint(requestId)),
 				},
 				":tV": {
 					S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
@@ -257,23 +315,18 @@ func updateSessionId(phone, sessionId string, lc *lambdacontext.LambdaContext) (
 				},
 			},
 			TableName:        aws.String(userTableName),
-			UpdateExpression: aws.String("SET #sessionId = :sV, #time = :tV"),
-			ReturnValues:     aws.String("ALL_NEW"),
+			UpdateExpression: aws.String("SET #requestId = :rV, #time = :tV"),
 		}
 
-	res, err := awsDbClient.UpdateItem(input)
+	_, err := awsDbClient.UpdateItem(input)
 	if err != nil {
-		anlogger.Errorf(lc, "start.go : error while update sessionId [%s] for phone [%s] : %v", sessionId, phone, err)
-		return "", "", "", false, apimodel.InternalServerError
+		anlogger.Errorf(lc, "start.go : error while update request id [%s], for phone [%s] and userId [%s] : %v", requestId, phone, userId, err)
+		return false, apimodel.InternalServerError
 	}
 
-	resultSessionId := *res.Attributes[apimodel.SessionIdColumnName].S
-	resultUserId := *res.Attributes[apimodel.UserIdColumnName].S
-	resultCustomerId := *res.Attributes[apimodel.CustomerIdColumnName].S
+	anlogger.Debugf(lc, "start.go : successfully update request id [%s] for phone [%s] and userId [%s]", requestId, phone, userId)
 
-	anlogger.Debugf(lc, "start.go : successfully update sessionId [%s] for phone [%s], userId [%s] and customerId [%s]", resultSessionId, phone, resultUserId, resultCustomerId)
-
-	return resultSessionId, resultUserId, resultCustomerId, true, ""
+	return true, ""
 }
 
 //return userId, sessionId,  was user created, was everything ok and error string
@@ -290,6 +343,7 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 				"#phoneNumber": aws.String(apimodel.PhoneNumberColumnName),
 				"#time":        aws.String(apimodel.UpdatedTimeColumnName),
 				"#customerId":  aws.String(apimodel.CustomerIdColumnName),
+				"#provider":    aws.String(apimodel.VerifyProviderColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":uV": {
@@ -311,6 +365,9 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 				":cIdV": {
 					S: aws.String(userInfo.CustomerId),
 				},
+				":providerV": {
+					S: aws.String(userInfo.VerifyProvider),
+				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
 				apimodel.PhoneColumnName: {
@@ -320,7 +377,7 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", apimodel.PhoneColumnName)),
 
 			TableName:        aws.String(userTableName),
-			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV, #customerId = :cIdV"),
+			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV, #customerId = :cIdV, #provider = :providerV"),
 			ReturnValues:     aws.String("ALL_NEW"),
 		}
 
@@ -362,74 +419,6 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Star
 
 	anlogger.Debugf(lc, "start.go : successfully parse param string [%s] to request=%v", params, req)
 	return &req, true
-}
-
-func startVerify(code int, number, locale string, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "start.go : verify phone with code [%d] and phone [%s]", code, number)
-
-	params := fmt.Sprintf("via=sms&&phone_number=%s&&country_code=%d", number, code)
-	if len(locale) != 0 {
-		params = fmt.Sprintf("via=sms&&phone_number=%s&&country_code=%d&&locale=%s", number, code, locale)
-	}
-	url := "https://api.authy.com/protected/json/phones/verification/start"
-
-	req, err := http.NewRequest("POST", url, strings.NewReader(params))
-
-	if err != nil {
-		anlogger.Errorf(lc, "start.go : error while construct the request to verify code [%d] and phone [%s] : %v", code, number, err)
-		return false, apimodel.InternalServerError
-	}
-
-	req.Header.Set("X-Authy-API-Key", twilioKey)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	client := &http.Client{}
-
-	anlogger.Debugf(lc, "start.go : make POST request by url %s with params %s", url, params)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		anlogger.Errorf(lc, "start.go error while making request by url %s with params %s : %v", url, params, err)
-		return false, apimodel.InternalServerError
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		anlogger.Errorf(lc, "start.go : error reading response body from Twilio, code [%d] and phone [%s] : %v", code, number, err)
-		return false, apimodel.InternalServerError
-	}
-
-	anlogger.Debugf(lc, "start.go : receive response from Twilio, body=%s, code [%d] and phone [%s]", string(body), code, number)
-	if resp.StatusCode != 200 {
-		anlogger.Errorf(lc, "start.go : error while sending sms, status %v, body %v",
-			resp.StatusCode, string(body))
-
-		var errorResp map[string]interface{}
-		err := json.Unmarshal(body, &errorResp)
-		if err != nil {
-			anlogger.Errorf(lc, "start.go : error parsing Twilio response, code [%d] and phone [%s] : %v", code, number, err)
-			return false, apimodel.InternalServerError
-		}
-
-		if errorCodeObject, ok := errorResp["error_code"]; ok {
-			if errorCodeStr, ok := errorCodeObject.(string); ok {
-				anlogger.Errorf(lc, "start.go : Twilio return error_code=%s, code [%d] and phone [%s]", errorCodeStr, code, number, err)
-				switch errorCodeStr {
-				case "60033":
-					return false, apimodel.PhoneNumberClientError
-				case "60078":
-					return false, apimodel.CountryCallingCodeClientError
-				}
-			}
-		}
-
-		return false, apimodel.InternalServerError
-	}
-
-	anlogger.Infof(lc, "start.go : sms was successfully sent, status %v, body %v, code [%d] and phone [%s]",
-		resp.StatusCode, string(body), code, number)
-	return true, ""
 }
 
 func main() {

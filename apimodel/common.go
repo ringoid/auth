@@ -8,8 +8,14 @@ const (
 	Region     = "eu-west-1"
 	MaxRetries = 3
 
-	TwilioApiKeyName    = "twilio-api-key"
 	TwilioSecretKeyBase = "%s/Twilio/Api/Key"
+	TwilioApiKeyName    = "twilio-api-key"
+
+	NexmoSecretKeyBase = "%s/Nexmo/Api/Key"
+	NexmoApiKeyName    = "nexmo-api-key"
+
+	NexmoApiSecretKeyBase = "%s/Nexmo/Api/Secret"
+	NexmoApiSecretKeyName = "nexmo-api-secret"
 
 	SecretWordKeyName = "secret-word-key"
 	SecretWordKeyBase = "%s/SecretWord"
@@ -27,11 +33,14 @@ const (
 	SessionTokenColumnName = "session_token"
 	SexColumnName          = "sex"
 
-	YearOfBirthColumnName = "year_of_birth"
-	ProfileCreatedAt      = "profile_created_at"
-	CustomerIdColumnName  = "customer_id"
+	YearOfBirthColumnName     = "year_of_birth"
+	ProfileCreatedAt          = "profile_created_at"
+	CustomerIdColumnName      = "customer_id"
+	VerifyProviderColumnName  = "verify_provider"
+	VerifyRequestIdColumnName = "verify_request_id"
 
-	UpdatedTimeColumnName = "updated_at"
+	UpdatedTimeColumnName    = "updated_at"
+	LastOnlineTimeColumnName = "last_online_time"
 
 	WhoCanSeePhotoColumnName      = "who_can_see_photo"
 	SafeDistanceInMeterColumnName = "safe_distance_in_meter"
@@ -57,6 +66,9 @@ const (
 	WrongYearOfBirthClientError   = `{"errorCode":"WrongYearOfBirthClientError","errorMessage":"Wrong year of birth"}`
 	WrongSexClientError           = `{"errorCode":"WrongSexClientError","errorMessage":"Wrong sex"}`
 	InvalidAccessTokenClientError = `{"errorCode":"InvalidAccessTokenClientError","errorMessage":"Invalid access token"}`
+
+	Twilio = "Twilio"
+	Nexmo  = "Nexmo"
 )
 
 type BaseResponse struct {
@@ -66,4 +78,12 @@ type BaseResponse struct {
 
 func (resp BaseResponse) String() string {
 	return fmt.Sprintf("[BaseResponse={errorCode=%s, errorMessage=%s}", resp.ErrorCode, resp.ErrorMessage)
+}
+
+var RoutingRuleMap map[int]string
+
+func init() {
+	RoutingRuleMap = make(map[int]string)
+	RoutingRuleMap[1] = Twilio
+	RoutingRuleMap[44] = Twilio
 }

@@ -11,12 +11,16 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-lambda-go/lambdacontext"
+	"github.com/aws/aws-sdk-go/service/kinesis"
+	"strings"
 )
 
 var anlogger *syslog.Logger
 var awsDbClient *dynamodb.DynamoDB
 var userProfileTable string
 var secretWord string
+var commonStreamName string
+var awsKinesisClient *kinesis.Kinesis
 
 func init() {
 	var env string
@@ -65,6 +69,16 @@ func init() {
 
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "internal_get_user_id.go : dynamodb client was successfully initialized")
+
+	commonStreamName, ok = os.LookupEnv("COMMON_STREAM")
+	if !ok {
+		anlogger.Fatalf(nil, "internal_get_user_id.go : env can not be empty COMMON_STREAM")
+		os.Exit(1)
+	}
+	anlogger.Debugf(nil, "internal_get_user_id.go : start with COMMON_STREAM = [%s]", commonStreamName)
+
+	awsKinesisClient = kinesis.New(awsSession)
+	anlogger.Debugf(nil, "internal_get_user_id.go : kinesis client was successfully initialized")
 }
 
 func handler(ctx context.Context, request apimodel.InternalGetUserIdReq) (apimodel.InternalGetUserIdResp, error) {
@@ -78,26 +92,17 @@ func handler(ctx context.Context, request apimodel.InternalGetUserIdReq) (apimod
 
 	resp := apimodel.InternalGetUserIdResp{}
 
-	userId, sessionToken, ok, errStr := apimodel.DecodeToken(request.AccessToken, secretWord, anlogger, lc)
+	userId, ok, errStr := apimodel.Login(request.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", errStr)
+
+		if strings.Contains(errStr, "InvalidAccessTokenClientError") {
+			resp.ErrorCode = "InvalidAccessTokenClientError"
+			resp.ErrorMessage = "Invalid access token"
+			return resp, nil
+		}
 		resp.ErrorCode = "InternalServerError"
 		resp.ErrorMessage = "Internal Server Error"
-		return resp, nil
-	}
-
-	valid, ok, errStr := apimodel.IsSessionValid(userId, sessionToken, userProfileTable, awsDbClient, anlogger, lc)
-	if !ok {
-		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", errStr)
-		resp.ErrorCode = "InternalServerError"
-		resp.ErrorMessage = "Internal Server Error"
-		return resp, nil
-	}
-
-	if !valid {
-		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", apimodel.InvalidAccessTokenClientError)
-		resp.ErrorCode = "InvalidAccessTokenClientError"
-		resp.ErrorMessage = "Invalid Access Token"
 		return resp, nil
 	}
 
