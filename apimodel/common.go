@@ -33,11 +33,13 @@ const (
 	SessionTokenColumnName = "session_token"
 	SexColumnName          = "sex"
 
-	YearOfBirthColumnName     = "year_of_birth"
-	ProfileCreatedAt          = "profile_created_at"
-	CustomerIdColumnName      = "customer_id"
-	VerifyProviderColumnName  = "verify_provider"
-	VerifyRequestIdColumnName = "verify_request_id"
+	YearOfBirthColumnName         = "year_of_birth"
+	ProfileCreatedAt              = "profile_created_at"
+	CustomerIdColumnName          = "customer_id"
+	VerifyProviderColumnName      = "verify_provider"
+	VerifyRequestIdColumnName     = "verify_request_id"
+	VerificationStatusColumnName  = "verify_status"
+	VerificationStartAtColumnName = "verification_start_at"
 
 	UpdatedTimeColumnName    = "updated_at"
 	LastOnlineTimeColumnName = "last_online_time"

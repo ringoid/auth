@@ -65,25 +65,27 @@ func NewUserVerificationStart(userId, provider string, country int) *UserVerific
 }
 
 type UserVerificationCompleteEvent struct {
-	UserId         string `json:"userId"`
-	CountryCode    int    `json:"countryCode"`
-	VerifyProvider string `json:"verifyProvider"`
-	UnixTime       int64  `json:"unixTime"`
-	EventType      string `json:"eventType"`
+	UserId              string `json:"userId"`
+	CountryCode         int    `json:"countryCode"`
+	VerifyProvider      string `json:"verifyProvider"`
+	VerificationStartAt int64  `json:"verificationStartAt"`
+	UnixTime            int64  `json:"unixTime"`
+	EventType           string `json:"eventType"`
 }
 
 func (event UserVerificationCompleteEvent) String() string {
-	return fmt.Sprintf("[UserVerificationCompleteEvent={userId=%s, countryCode=%d, verifyProvider=%s, unixTime=%v, eventType=%v}]",
-		event.UserId, event.CountryCode, event.VerifyProvider, event.UnixTime, event.EventType)
+	return fmt.Sprintf("[UserVerificationCompleteEvent={userId=%s, countryCode=%d, verifyProvider=%s, verificationStartAt=%v, unixTime=%v, eventType=%v}]",
+		event.UserId, event.CountryCode, event.VerifyProvider, event.VerificationStartAt, event.UnixTime, event.EventType)
 }
 
-func NewUserVerificationCompleteEvent(userId, provider string, country int) *UserVerificationCompleteEvent {
+func NewUserVerificationCompleteEvent(userId, provider string, country int, startAt int64) *UserVerificationCompleteEvent {
 	return &UserVerificationCompleteEvent{
-		UserId:         userId,
-		CountryCode:    country,
-		VerifyProvider: provider,
-		UnixTime:       time.Now().Unix(),
-		EventType:      "AUTH_USER_COMPLETE_VERIFICATION",
+		UserId:              userId,
+		CountryCode:         country,
+		VerifyProvider:      provider,
+		VerificationStartAt: startAt,
+		UnixTime:            time.Now().Unix(),
+		EventType:           "AUTH_USER_COMPLETE_VERIFICATION",
 	}
 }
 

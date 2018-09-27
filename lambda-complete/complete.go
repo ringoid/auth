@@ -142,8 +142,11 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
 	}
 
-	event := apimodel.NewUserVerificationCompleteEvent(userInfo.UserId, userInfo.VerifyProvider, userInfo.CountryCode)
+	event := apimodel.NewUserVerificationCompleteEvent(userInfo.UserId, userInfo.VerifyProvider, userInfo.CountryCode, userInfo.VerificationStartAt)
 	apimodel.SendAnalyticEvent(event, userInfo.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+
+	//ignore the errors
+	updateVerifyStatusToComplete(userInfo.Phone, userInfo.UserId, lc)
 
 	sessionToken, err := uuid.NewV4()
 	if err != nil {
@@ -179,6 +182,40 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	//return OK with AccessToken
 	anlogger.Debugf(lc, "complete.go : return body=%s to client, userId [%s]", string(body), userInfo.UserId)
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
+}
+
+//return is everything ok and error string
+func updateVerifyStatusToComplete(phone, userId string, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "complete.go : update verify status to complete for phone [%s] and userId [%s]", phone, userId)
+
+	input :=
+		&dynamodb.UpdateItemInput{
+			ExpressionAttributeNames: map[string]*string{
+				"#verifyStatus": aws.String(apimodel.VerificationStatusColumnName),
+			},
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":verifyStatusV": {
+					S: aws.String("complete"),
+				},
+			},
+			Key: map[string]*dynamodb.AttributeValue{
+				apimodel.PhoneColumnName: {
+					S: aws.String(phone),
+				},
+			},
+			TableName:        aws.String(userTableName),
+			UpdateExpression: aws.String("SET #verifyStatus = :verifyStatusV"),
+		}
+
+	_, err := awsDbClient.UpdateItem(input)
+	if err != nil {
+		anlogger.Errorf(lc, "complete.go : error while update verify status to complete for phone [%s] and userId [%s] : %v", phone, userId, err)
+		return false, apimodel.InternalServerError
+	}
+
+	anlogger.Debugf(lc, "complete.go : successfully update verify status to complete for phone [%s] and userId [%s]", phone, userId)
+
+	return true, ""
 }
 
 //return do we already have such user, ok, errorString if not ok
@@ -294,15 +331,25 @@ func fetchBySessionId(sessionId string, lc *lambdacontext.LambdaContext) (*apimo
 		requestId = *requestIdAttr.S
 	}
 
+	var verificationStartAt int64
+	if verificationStartAtAttr, ok := res.Items[0][apimodel.VerificationStartAtColumnName]; ok {
+		if value, err := strconv.ParseInt(*verificationStartAtAttr.N, 0, 64); err != nil {
+			anlogger.Warnf(lc, "complete.go : error while verification start value [%s] , sessionId [%s] : %v", *verificationStartAtAttr.N, sessionId, err)
+		} else {
+			verificationStartAt = value
+		}
+	}
+
 	userInfo := &apimodel.UserInfo{
-		UserId:          userId,
-		SessionId:       sessId,
-		Phone:           phone,
-		CountryCode:     countryCode,
-		PhoneNumber:     phonenumber,
-		CustomerId:      customerId,
-		VerifyProvider:  provider,
-		VerifyRequestId: requestId,
+		UserId:              userId,
+		SessionId:           sessId,
+		Phone:               phone,
+		CountryCode:         countryCode,
+		PhoneNumber:         phonenumber,
+		CustomerId:          customerId,
+		VerifyProvider:      provider,
+		VerifyRequestId:     requestId,
+		VerificationStartAt: verificationStartAt,
 	}
 
 	anlogger.Debugf(lc, "complete.go : successfully fetch userInfo %v by sessionId [%s]", userInfo, sessionId)

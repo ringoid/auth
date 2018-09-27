@@ -251,9 +251,11 @@ func updateSessionId(phone, sessionId, provider string, lc *lambdacontext.Lambda
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
-				"#sessionId": aws.String(apimodel.SessionIdColumnName),
-				"#time":      aws.String(apimodel.UpdatedTimeColumnName),
-				"#provider":  aws.String(apimodel.VerifyProviderColumnName),
+				"#sessionId":     aws.String(apimodel.SessionIdColumnName),
+				"#time":          aws.String(apimodel.UpdatedTimeColumnName),
+				"#provider":      aws.String(apimodel.VerifyProviderColumnName),
+				"#verifyStatus":  aws.String(apimodel.VerificationStatusColumnName),
+				"#verifyStartAt": aws.String(apimodel.VerificationStartAtColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":sV": {
@@ -265,6 +267,12 @@ func updateSessionId(phone, sessionId, provider string, lc *lambdacontext.Lambda
 				":providerV": {
 					S: aws.String(provider),
 				},
+				":verifyStatusV": {
+					S: aws.String("start"),
+				},
+				":verifyStartAtV": {
+					N: aws.String(fmt.Sprintf("%v", time.Now().Unix())),
+				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
 				apimodel.PhoneColumnName: {
@@ -272,7 +280,7 @@ func updateSessionId(phone, sessionId, provider string, lc *lambdacontext.Lambda
 				},
 			},
 			TableName:        aws.String(userTableName),
-			UpdateExpression: aws.String("SET #sessionId = :sV, #time = :tV, #provider = :providerV"),
+			UpdateExpression: aws.String("SET #sessionId = :sV, #time = :tV, #provider = :providerV, #verifyStatus = :verifyStatusV, #verifyStartAt = :verifyStartAtV"),
 			ReturnValues:     aws.String("ALL_NEW"),
 		}
 
@@ -343,11 +351,13 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 				"#userId":    aws.String(apimodel.UserIdColumnName),
 				"#sessionId": aws.String(apimodel.SessionIdColumnName),
 
-				"#countryCode": aws.String(apimodel.CountryCodeColumnName),
-				"#phoneNumber": aws.String(apimodel.PhoneNumberColumnName),
-				"#time":        aws.String(apimodel.UpdatedTimeColumnName),
-				"#customerId":  aws.String(apimodel.CustomerIdColumnName),
-				"#provider":    aws.String(apimodel.VerifyProviderColumnName),
+				"#countryCode":   aws.String(apimodel.CountryCodeColumnName),
+				"#phoneNumber":   aws.String(apimodel.PhoneNumberColumnName),
+				"#time":          aws.String(apimodel.UpdatedTimeColumnName),
+				"#customerId":    aws.String(apimodel.CustomerIdColumnName),
+				"#provider":      aws.String(apimodel.VerifyProviderColumnName),
+				"#verifyStatus":  aws.String(apimodel.VerificationStatusColumnName),
+				"#verifyStartAt": aws.String(apimodel.VerificationStartAtColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":uV": {
@@ -372,6 +382,12 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 				":providerV": {
 					S: aws.String(userInfo.VerifyProvider),
 				},
+				":verifyStatusV": {
+					S: aws.String("start"),
+				},
+				":verifyStartAtV": {
+					N: aws.String(fmt.Sprintf("%v", time.Now().Unix())),
+				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
 				apimodel.PhoneColumnName: {
@@ -381,7 +397,7 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", apimodel.PhoneColumnName)),
 
 			TableName:        aws.String(userTableName),
-			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV, #customerId = :cIdV, #provider = :providerV"),
+			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV, #customerId = :cIdV, #provider = :providerV, #verifyStatus = :verifyStatusV, #verifyStartAt = :verifyStartAtV"),
 			ReturnValues:     aws.String("ALL_NEW"),
 		}
 
