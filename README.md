@@ -226,15 +226,28 @@ Possible errorCodes:
 
 `{"userId":"aslkdl-asfmfa-asd","sourceIp":"82.102.27.75","unixTime":1534338646,"dtTC":1535120929,"dtPN":1535120929,"dtLA":1535120929,locale":"","clientValidationFail":true,"eventType":"AUTH_USER_ACCEPT_TERMS"}`
 
-2. AUTH_USER_COMPLETE_VERIFICATION
+2. AUTH_USER_START_VERIFICATION
 
 * userId - string
+* countryCode - int
+* verifyProvider - string
+* unixTime - int
+* eventType - string (AUTH_USER_START_VERIFICATION)
+
+`{"userId":"aslkdl-asfmfa-asd","countryCode":7,"verifyProvider":"Nexmo","unixTime":1534338646,"eventType":"AUTH_USER_START_VERIFICATION"}`
+
+
+3. AUTH_USER_COMPLETE_VERIFICATION
+
+* userId - string
+* countryCode - int
+* verifyProvider - string
 * unixTime - int
 * eventType - string (AUTH_USER_COMPLETE_VERIFICATION)
 
-`{"userId":"aslkdl-asfmfa-asd","unixTime":1534338646,"eventType":"AUTH_USER_COMPLETE_VERIFICATION"}`
+`{"userId":"aslkdl-asfmfa-asd","countryCode":7,"verifyProvider":"Nexmo","unixTime":1534338646,"eventType":"AUTH_USER_COMPLETE_VERIFICATION"}`
 
-3. AUTH_USER_PROFILE_CREATED
+4. AUTH_USER_PROFILE_CREATED
 
 * userId - string
 * sex - string
@@ -244,7 +257,7 @@ Possible errorCodes:
 
 `{"userId":"aslkdl-asfmfa-asd","sex":"male","yearOfBirth":"1982","unixTime":1534338646,"eventType":"AUTH_USER_PROFILE_CREATED"}`
 
-4. AUTH_USER_SETTINGS_UPDATED
+5. AUTH_USER_SETTINGS_UPDATED
 
 * userId - string
 * whoCanSeePhoto  - string
@@ -260,7 +273,7 @@ Possible errorCodes:
 
 `{"userId":"aslkdl-asfmfa-asd","whoCanSeePhoto":"OPPOSITE","safeDistanceInMeter":0,"pushMessages":true,"pushMatches":true,"pushLikes":"EVERY","unixTime":1534338646,"inAppMessages":true, "inAppMatches":true, "inAppLikes":"EVERY", "eventType":"AUTH_USER_SETTINGS_UPDATED"}`
 
-5. AUTH_USER_LOGOUT
+6. AUTH_USER_LOGOUT
 
 * userId - string
 * unixTime - int

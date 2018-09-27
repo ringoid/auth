@@ -142,7 +142,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
 	}
 
-	event := apimodel.NewUserVerificationCompleteEvent(userInfo.UserId)
+	event := apimodel.NewUserVerificationCompleteEvent(userInfo.UserId, userInfo.VerifyProvider, userInfo.CountryCode)
 	apimodel.SendAnalyticEvent(event, userInfo.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	sessionToken, err := uuid.NewV4()

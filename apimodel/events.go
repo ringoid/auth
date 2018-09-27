@@ -41,21 +41,49 @@ func NewUserAcceptTermsEvent(req *StartReq, sourceIp, userId, customerId string)
 	}
 }
 
+type UserVerificationStart struct {
+	UserId         string `json:"userId"`
+	CountryCode    int    `json:"countryCode"`
+	VerifyProvider string `json:"verifyProvider"`
+	UnixTime       int64  `json:"unixTime"`
+	EventType      string `json:"eventType"`
+}
+
+func (event UserVerificationStart) String() string {
+	return fmt.Sprintf("[UserAcceptTermsEvent={userId=%s, countryCode=%d, verifyProvider=%s, unixTime=%v, eventType=%s}]",
+		event.UserId, event.CountryCode, event.VerifyProvider, event.UnixTime, event.EventType)
+}
+
+func NewUserVerificationStart(userId, provider string, country int) *UserVerificationStart {
+	return &UserVerificationStart{
+		UserId:         userId,
+		VerifyProvider: provider,
+		CountryCode:    country,
+		UnixTime:       time.Now().Unix(),
+		EventType:      "AUTH_USER_START_VERIFICATION",
+	}
+}
+
 type UserVerificationCompleteEvent struct {
-	UserId    string `json:"userId"`
-	UnixTime  int64  `json:"unixTime"`
-	EventType string `json:"eventType"`
+	UserId         string `json:"userId"`
+	CountryCode    int    `json:"countryCode"`
+	VerifyProvider string `json:"verifyProvider"`
+	UnixTime       int64  `json:"unixTime"`
+	EventType      string `json:"eventType"`
 }
 
 func (event UserVerificationCompleteEvent) String() string {
-	return fmt.Sprintf("[UserVerificationCompleteEvent={userId=%s, unixTime=%v, eventType=%v}]", event.UserId, event.UnixTime, event.EventType)
+	return fmt.Sprintf("[UserVerificationCompleteEvent={userId=%s, countryCode=%d, verifyProvider=%s, unixTime=%v, eventType=%v}]",
+		event.UserId, event.CountryCode, event.VerifyProvider, event.UnixTime, event.EventType)
 }
 
-func NewUserVerificationCompleteEvent(userId string) *UserVerificationCompleteEvent {
+func NewUserVerificationCompleteEvent(userId, provider string, country int) *UserVerificationCompleteEvent {
 	return &UserVerificationCompleteEvent{
-		UserId:    userId,
-		UnixTime:  time.Now().Unix(),
-		EventType: "AUTH_USER_COMPLETE_VERIFICATION",
+		UserId:         userId,
+		CountryCode:    country,
+		VerifyProvider: provider,
+		UnixTime:       time.Now().Unix(),
+		EventType:      "AUTH_USER_COMPLETE_VERIFICATION",
 	}
 }
 

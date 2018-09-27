@@ -205,6 +205,10 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
 	}
 
+	//send analytics event
+	eventStartVerify := apimodel.NewUserVerificationStart(resUserId, userInfo.VerifyProvider, userInfo.CountryCode)
+	apimodel.SendAnalyticEvent(eventStartVerify, resUserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+
 	body, err := json.Marshal(resp)
 	if err != nil {
 		anlogger.Errorf(lc, "start.go : error while marshaling resp object : %v", err)
