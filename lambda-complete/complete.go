@@ -18,6 +18,7 @@ import (
 	"time"
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/dgrijalva/jwt-go"
+	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
 
 var anlogger *syslog.Logger
@@ -30,6 +31,11 @@ var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 var nexmoApiKey string
 var nexmoApiSecret string
+
+var awsCWClient *cloudwatch.CloudWatch
+var baseCloudWatchNamespace string
+var nexmoCompleteMetricName string
+var twilioCompleteMetricName string
 
 func init() {
 	var env string
@@ -98,6 +104,27 @@ func init() {
 
 	awsDeliveryStreamClient = firehose.New(awsSession)
 	anlogger.Debugf(nil, "complete.go : firehose client was successfully initialized")
+
+	awsCWClient = cloudwatch.New(awsSession)
+	anlogger.Debugf(nil, "complete.go : cloudwatch client was successfully initialized")
+
+	baseCloudWatchNamespace, ok = os.LookupEnv("BASE_CLOUD_WATCH_NAMESPACE")
+	if !ok {
+		anlogger.Fatalf(nil, "complete.go : env can not be empty BASE_CLOUD_WATCH_NAMESPACE")
+	}
+	anlogger.Debugf(nil, "complete.go : start with BASE_CLOUD_WATCH_NAMESPACE = [%s]", baseCloudWatchNamespace)
+
+	nexmoCompleteMetricName, ok = os.LookupEnv("CLOUD_WATCH_NEXMO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME")
+	if !ok {
+		anlogger.Fatalf(nil, "complete.go : env can not be empty CLOUD_WATCH_NEXMO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME")
+	}
+	anlogger.Debugf(nil, "complete.go : start with CLOUD_WATCH_NEXMO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME = [%s]", nexmoCompleteMetricName)
+
+	twilioCompleteMetricName, ok = os.LookupEnv("CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME")
+	if !ok {
+		anlogger.Fatalf(nil, "complete.go : env can not be empty CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME")
+	}
+	anlogger.Debugf(nil, "complete.go : start with CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME = [%s]", twilioCompleteMetricName)
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -122,6 +149,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
+	timeToComplete := time.Now().Unix() - userInfo.VerificationStartAt
 	switch userInfo.VerifyProvider {
 	case apimodel.Twilio:
 		ok, errStr = apimodel.CompleteTwilioVerify(userInfo, reqParam.VerificationCode, twilioKey, anlogger, lc)
@@ -129,12 +157,14 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 			anlogger.Errorf(lc, "complete.go : userId [%s], return %s to client", userInfo.UserId, errStr)
 			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 		}
+		apimodel.SendCloudWatchMetric(baseCloudWatchNamespace, twilioCompleteMetricName, int(timeToComplete), awsCWClient, anlogger, lc)
 	case apimodel.Nexmo:
 		ok, errStr = apimodel.CompleteNexmoVerify(userInfo, reqParam.VerificationCode, nexmoApiKey, nexmoApiSecret, anlogger, lc)
 		if !ok {
 			anlogger.Errorf(lc, "complete.go : userId [%s], return %s to client", userInfo.UserId, errStr)
 			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 		}
+		apimodel.SendCloudWatchMetric(baseCloudWatchNamespace, nexmoCompleteMetricName, int(timeToComplete), awsCWClient, anlogger, lc)
 	default:
 		errorStr := apimodel.InternalServerError
 		anlogger.Errorf(lc, "complete.go : unsupported verify provider [%s]", userInfo.VerifyProvider)

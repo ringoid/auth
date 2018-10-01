@@ -19,6 +19,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"crypto/sha1"
+	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
 var anlogger *syslog.Logger
@@ -29,6 +30,10 @@ var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 var nexmoApiKey string
 var nexmoApiSecret string
+var asyncTaskQueue string
+var awsSqsClient *sqs.SQS
+
+const defaultMaxTimeToCompleteVerificationInSec = 300
 
 func init() {
 	var env string
@@ -89,6 +94,16 @@ func init() {
 
 	awsDeliveryStreamClient = firehose.New(awsSession)
 	anlogger.Debugf(nil, "start.go : firehose client was successfully initialized")
+
+	asyncTaskQueue, ok = os.LookupEnv("ASYNC_TASK_SQS_QUEUE")
+	if !ok {
+		fmt.Printf("start.go : env can not be empty ASYNC_TASK_SQS_QUEUE")
+		os.Exit(1)
+	}
+	anlogger.Debugf(nil, "start.go : start with ASYNC_TASK_SQS_QUEUE = [%s]", asyncTaskQueue)
+
+	awsSqsClient = sqs.New(awsSession)
+	anlogger.Debugf(nil, "start.go : sqs client was successfully initialized")
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -208,6 +223,10 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	//send analytics event
 	eventStartVerify := apimodel.NewUserVerificationStart(resUserId, userInfo.VerifyProvider, userInfo.CountryCode)
 	apimodel.SendAnalyticEvent(eventStartVerify, resUserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+
+	//send delayed task to check complete verification
+	task := apimodel.NewCheckVerificationCompleteTask(userInfo.Phone, userTableName)
+	apimodel.SendAsyncTask(task, asyncTaskQueue, userInfo.UserId, defaultMaxTimeToCompleteVerificationInSec, awsSqsClient, anlogger, lc)
 
 	body, err := json.Marshal(resp)
 	if err != nil {

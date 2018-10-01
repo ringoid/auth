@@ -158,6 +158,10 @@ func CompleteNexmoVerify(userInfo *UserInfo, verificationCode, apiKey, apiSecret
 				//todo:make difference between code and numbers error
 				//return "", false, CountryCallingCodeClientError
 				return false, PhoneNumberClientError
+			case "16":
+				errorText = nexmoResp["error_text"].(string)
+				anlogger.Errorf(lc, "nexmo.go : complete verification error, invalid verification code, error text [%s], response %v for userId [%s]", errorText, nexmoResp, userInfo.UserId)
+				return false, WrongVerificationCodeClientError
 			default:
 				errorText = nexmoResp["error_text"].(string)
 				anlogger.Errorf(lc, "nexmo.go : complete verification error, error text [%s], response %v for userId [%s]", errorText, nexmoResp, userInfo.UserId)

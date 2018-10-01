@@ -16,6 +16,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/aws/aws-lambda-go/events"
 	"time"
+	"github.com/aws/aws-sdk-go/service/sqs"
+	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
 
 //return userId, sessionToken, ok, error string
@@ -269,4 +271,54 @@ func Login(token, secretWord, userProfileTable, commonStreamName string, awsDbCl
 
 	anlogger.Debugf(lc, "common_action.go : successfully login for token [%s]", token)
 	return userId, true, ""
+}
+
+//return ok and error string
+func SendAsyncTask(task interface{}, asyncTaskQueue, userId string, messageSecDelay int64,
+	awsSqsClient *sqs.SQS, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "common_action.go : send async task %v for userId [%s] with delay in sec [%v]", task, userId, messageSecDelay)
+	body, err := json.Marshal(task)
+	if err != nil {
+		anlogger.Errorf(lc, "common_action.go : error marshal task %v for userId [%s] with delay in sec [%v] : %v", task, userId, messageSecDelay, err)
+		return false, InternalServerError
+	}
+	input := &sqs.SendMessageInput{
+		DelaySeconds: aws.Int64(messageSecDelay),
+		QueueUrl:     aws.String(asyncTaskQueue),
+		MessageBody:  aws.String(string(body)),
+	}
+	_, err = awsSqsClient.SendMessage(input)
+	if err != nil {
+		anlogger.Errorf(lc, "common_action.go : error sending async task %v to the queue for userId [%s] with delay in sec [%v] : %v", task, userId, messageSecDelay, err)
+		return false, InternalServerError
+	}
+	anlogger.Debugf(lc, "common_action.go : successfully send async task %v for userId [%s] with delay in sec [%v]", task, userId, messageSecDelay)
+	return true, ""
+}
+
+//return ok and error string
+func SendCloudWatchMetric(baseCloudWatchNamespace, metricName string, value int, cwClient *cloudwatch.CloudWatch, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "common_action.go : send value [%d] for namespace [%s] and metric name [%s]", value, baseCloudWatchNamespace, metricName)
+
+	currentTime := time.Now().UTC()
+
+	peD := cloudwatch.MetricDatum{
+		MetricName: aws.String(metricName),
+		Timestamp:  &currentTime,
+		Value:      aws.Float64(float64(value)),
+	}
+
+	metricdatas := []*cloudwatch.MetricDatum{&peD}
+
+	_, err := cwClient.PutMetricData(&cloudwatch.PutMetricDataInput{
+		MetricData: metricdatas,
+		Namespace:  aws.String(baseCloudWatchNamespace),
+	})
+	if err != nil {
+		anlogger.Errorf(lc, "common_action.go : error sending cloudwatch metric with value [%d] for namespace [%s] and metric name [%s] : %v", value, baseCloudWatchNamespace, metricName, err)
+		return false, InternalServerError
+	}
+
+	anlogger.Debugf(lc, "common_action.go : successfully send value [%d] for namespace [%s] and metric name [%s]", value, baseCloudWatchNamespace, metricName)
+	return true, ""
 }

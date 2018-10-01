@@ -82,6 +82,10 @@ Mappings:
     LogoutAuthFunction:
       stage: stage-logout-auth
       prod: prod-logout-auth
+    InternalHandleAsyncTaskFunction:
+      stage: stage-internal-handle-async-task-auth
+      prod: prod-internal-handle-async-task-auth
+
 
 Parameters:
   Env:
@@ -91,6 +95,19 @@ Parameters:
       - stage
       - prod
     Description: Env name
+  CloudWatchNexmoNotCompleteVerificationInTimeMetricName:
+    Type: String
+    Default: Nexmo-NotCompleteVerificationInTime
+  CloudWatchTwilioNotCompleteVerificationInTimeMetricName:
+    Type: String
+    Default: Twilio-NotCompleteVerificationInTime
+  CloudWatchNexmoCompleteVerificationInTimeMetricName:
+    Type: String
+    Default: Nexmo-CompleteVerificationInTime
+  CloudWatchTwilioCompleteVerificationInTimeMetricName:
+    Type: String
+    Default: Twilio-CompleteVerificationInTime
+
 
 Globals:
     Function:
@@ -111,6 +128,13 @@ Globals:
               Fn::ImportValue:
                 !Join [ "-", [ !Ref Env, CommonEventStreamExportName] ]
             NEED_WARM_UP_LAMBDA_NAMES: !Join [ ",", [ !FindInMap [FunctionName, StartAuthFunction, !Ref Env], !FindInMap [FunctionName, CompleteAuthFunction, !Ref Env], !FindInMap [FunctionName, CreateAuthFunction, !Ref Env], !FindInMap [FunctionName, UpdateSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, GetSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, InternalGetUserIdFunction, !Ref Env], !FindInMap [FunctionName, LogoutAuthFunction, !Ref Env] ]]
+            ASYNC_TASK_SQS_QUEUE: !Ref AsyncTaskSqsQueue
+            BASE_CLOUD_WATCH_NAMESPACE: !Join [ "-", [ !Ref Env, auth, service] ]
+            CLOUD_WATCH_NEXMO_NOT_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME: !Ref CloudWatchNexmoNotCompleteVerificationInTimeMetricName
+            CLOUD_WATCH_TWILIO_NOT_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME: !Ref CloudWatchTwilioNotCompleteVerificationInTimeMetricName
+            CLOUD_WATCH_NEXMO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME: !Ref CloudWatchNexmoCompleteVerificationInTimeMetricName
+            CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME: !Ref CloudWatchTwilioCompleteVerificationInTimeMetricName
+
         Tags:
           Company: Ringoid
           Service: auth
@@ -198,6 +222,7 @@ Resources:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
         - AmazonKinesisFirehoseFullAccess
+        - AmazonSQSFullAccess
       Events:
         StartEvent:
           Type: Api
@@ -216,7 +241,7 @@ Resources:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
         - AmazonKinesisFirehoseFullAccess
-
+        - CloudWatchFullAccess
       Events:
         CompleteEvent:
           Type: Api
@@ -311,6 +336,46 @@ Resources:
           Properties:
             Path: /logout
             Method: post
+
+  AsyncTaskSqsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Join [ "-", [ !Ref Env, auth, async-task-queue] ]
+      VisibilityTimeout: 300
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+            - AsyncTaskDeadMessageSqsQueue
+            - Arn
+        maxReceiveCount: 3
+
+  AsyncTaskDeadMessageSqsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Join [ "-", [ !Ref Env, auth, async-task-dead-messages-queue] ]
+      VisibilityTimeout: 300
+
+  InternalHandleAsyncTaskFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !FindInMap [FunctionName, InternalHandleAsyncTaskFunction, !Ref Env]
+      Handler: internal_handle_task
+      CodeUri: ./internal_handle_task.zip
+      Description: Handle async task from the queue
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - AmazonSQSFullAccess
+        - CloudWatchFullAccess
+      Events:
+        StartEvent:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+                - AsyncTaskSqsQueue
+                - Arn
+            BatchSize: 10
+
 
   UserProfileTable:
     Type: AWS::DynamoDB::Table
@@ -734,6 +799,41 @@ Resources:
         PredefinedMetricSpecification:
           PredefinedMetricType: DynamoDBReadCapacityUtilization
 
+  CloudWatchAlarmTooManyLostUsersNexmo:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Join [ "-", [ !Ref Env, auth, tooManyLostUsers, Nexmo] ]
+      AlarmDescription: Alarm - tooManyLostUsers - Nexmo
+      ActionsEnabled: true
+      AlarmActions:
+        - Fn::ImportValue: !Join [ "-", [ !Ref Env, SNSAlarmTopicExport] ]
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      OKActions:
+        - Fn::ImportValue: !Join [ "-", [ !Ref Env, SNSAlarmTopicExport] ]
+      EvaluationPeriods: 1
+      MetricName: !Ref CloudWatchNexmoNotCompleteVerificationInTimeMetricName
+      Namespace: !Join [ "-", [ !Ref Env, auth, service] ]
+      Period: 60
+      Threshold: 1
+      Statistic: Sum
+
+  CloudWatchAlarmTooManyLostUsersTwilio:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Join [ "-", [ !Ref Env, auth, tooManyLostUsers, Twilio] ]
+      AlarmDescription: Alarm - tooManyLostUsers - Twilio
+      ActionsEnabled: true
+      AlarmActions:
+        - Fn::ImportValue: !Join [ "-", [ !Ref Env, SNSAlarmTopicExport] ]
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      OKActions:
+        - Fn::ImportValue: !Join [ "-", [ !Ref Env, SNSAlarmTopicExport] ]
+      EvaluationPeriods: 1
+      MetricName: !Ref CloudWatchTwilioNotCompleteVerificationInTimeMetricName
+      Namespace: !Join [ "-", [ !Ref Env, auth, service] ]
+      Period: 60
+      Threshold: 1
+      Statistic: Sum
 
 Outputs:
   InternalGetUserIdFunctionExport:
