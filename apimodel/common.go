@@ -40,6 +40,7 @@ const (
 	VerifyRequestIdColumnName     = "verify_request_id"
 	VerificationStatusColumnName  = "verify_status"
 	VerificationStartAtColumnName = "verification_start_at"
+	LocaleColumnName              = "locale"
 
 	UpdatedTimeColumnName    = "updated_at"
 	LastOnlineTimeColumnName = "last_online_time"

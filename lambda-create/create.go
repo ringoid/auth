@@ -127,12 +127,6 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	ok, errStr = createUserProfileNeo4j(userId, reqParam, lc)
-	if !ok {
-		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
-	}
-
 	ok, errStr = createUserProfileDynamo(userId, reqParam, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
@@ -312,13 +306,6 @@ func createUserSettingsIntoDynamo(settings *apimodel.UserSettings, lc *lambdacon
 	}
 
 	anlogger.Debugf(lc, "create.go : successfully create user default settings for userId [%s], settings=%v", settings.UserId, settings)
-	return true, ""
-}
-
-//return ok and error string
-func createUserProfileNeo4j(userId string, req *apimodel.CreateReq, lc *lambdacontext.LambdaContext) (bool, string) {
-	//anlogger.Debugf(lc, "create.go : start create user profile in Neo4j for userId [%s] and req %v", userId, req)
-	//anlogger.Debugf(lc, "create.go : successfully create user profile in Neo4j for userId [%s] and req %v", userId, req)
 	return true, ""
 }
 

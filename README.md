@@ -25,7 +25,7 @@ Body:
         "clientValidationFail":true
     }
     
-    all parameters are required except locale
+    all parameters are required
     
  Locale values could be found [here](https://www.twilio.com/docs/verify/supported-languages)
     
@@ -231,10 +231,11 @@ Possible errorCodes:
 * userId - string
 * countryCode - int
 * verifyProvider - string
+* locale - string
 * unixTime - int
 * eventType - string (AUTH_USER_START_VERIFICATION)
 
-`{"userId":"aslkdl-asfmfa-asd","countryCode":7,"verifyProvider":"Nexmo","unixTime":1534338646,"eventType":"AUTH_USER_START_VERIFICATION"}`
+`{"userId":"aslkdl-asfmfa-asd","countryCode":7,"verifyProvider":"Nexmo","locale":"ru","unixTime":1534338646,"eventType":"AUTH_USER_START_VERIFICATION"}`
 
 
 3. AUTH_USER_COMPLETE_VERIFICATION
@@ -243,10 +244,11 @@ Possible errorCodes:
 * countryCode - int
 * verifyProvider - string
 * verificationStartAt - int
+* locale - string
 * unixTime - int
 * eventType - string (AUTH_USER_COMPLETE_VERIFICATION)
 
-`{"userId":"aslkdl-asfmfa-asd","countryCode":7,"verifyProvider":"Nexmo","verificationStartAt":123123123123,"unixTime":1534338646,"eventType":"AUTH_USER_COMPLETE_VERIFICATION"}`
+`{"userId":"aslkdl-asfmfa-asd","countryCode":7,"verifyProvider":"Nexmo","verificationStartAt":123123123123,"locale":"ru","unixTime":1534338646,"eventType":"AUTH_USER_COMPLETE_VERIFICATION"}`
 
 4. AUTH_USER_PROFILE_CREATED
 

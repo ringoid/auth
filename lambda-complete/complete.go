@@ -172,7 +172,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
 	}
 
-	event := apimodel.NewUserVerificationCompleteEvent(userInfo.UserId, userInfo.VerifyProvider, userInfo.CountryCode, userInfo.VerificationStartAt)
+	event := apimodel.NewUserVerificationCompleteEvent(userInfo.UserId, userInfo.VerifyProvider, userInfo.Locale, userInfo.CountryCode, userInfo.VerificationStartAt)
 	apimodel.SendAnalyticEvent(event, userInfo.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	//ignore the errors
@@ -184,7 +184,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
 
-	userExist, ok, errStr := updateSessionToken(userInfo.UserId, sessionToken.String(), lc)
+	userExist, ok, errStr := updateSessionToken(userInfo.UserId, sessionToken.String(), userInfo.Locale, lc)
 	if !ok {
 		anlogger.Errorf(lc, "complete.go : userId [%s], return %s to client", userInfo.UserId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
@@ -249,13 +249,14 @@ func updateVerifyStatusToComplete(phone, userId string, lc *lambdacontext.Lambda
 }
 
 //return do we already have such user, ok, errorString if not ok
-func updateSessionToken(userId, sessionToken string, lc *lambdacontext.LambdaContext) (bool, bool, string) {
-	anlogger.Debugf(lc, "complete.go : update sessionToken [%s] for userId [%s]", sessionToken, userId)
+func updateSessionToken(userId, sessionToken, locale string, lc *lambdacontext.LambdaContext) (bool, bool, string) {
+	anlogger.Debugf(lc, "complete.go : update sessionToken [%s], locale [%s] for userId [%s]", sessionToken, locale, userId)
 
 	input := &dynamodb.UpdateItemInput{
 		ExpressionAttributeNames: map[string]*string{
 			"#token":     aws.String(apimodel.SessionTokenColumnName),
 			"#updatedAt": aws.String(apimodel.TokenUpdatedTimeColumnName),
+			"#locale":    aws.String(apimodel.LocaleColumnName),
 		},
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":tV": {
@@ -263,6 +264,9 @@ func updateSessionToken(userId, sessionToken string, lc *lambdacontext.LambdaCon
 			},
 			":uV": {
 				S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
+			},
+			":localeV": {
+				S: aws.String(locale),
 			},
 		},
 		Key: map[string]*dynamodb.AttributeValue{
@@ -272,19 +276,19 @@ func updateSessionToken(userId, sessionToken string, lc *lambdacontext.LambdaCon
 		},
 		ReturnValues:     aws.String("ALL_OLD"),
 		TableName:        aws.String(userProfileTable),
-		UpdateExpression: aws.String("SET #token = :tV, #updatedAt = :uV"),
+		UpdateExpression: aws.String("SET #token = :tV, #updatedAt = :uV, #locale = :localeV"),
 	}
 
 	result, err := awsDbClient.UpdateItem(input)
 
 	if err != nil {
-		anlogger.Errorf(lc, "complete.go : error update sessionToken [%s] for userId [%s] : %v", sessionToken, userId, err)
+		anlogger.Errorf(lc, "complete.go : error update sessionToken [%s] and locale [%s] for userId [%s] : %v", sessionToken, locale, userId, err)
 		return false, false, apimodel.InternalServerError
 	}
 
 	_, ok := result.Attributes[apimodel.SexColumnName]
 
-	anlogger.Debugf(lc, "complete.go : successfully update sessionToken [%s] for userId [%s]", sessionToken, userId)
+	anlogger.Debugf(lc, "complete.go : successfully update sessionToken [%s] and locale [%s] for userId [%s]", sessionToken, locale, userId)
 	return ok, true, ""
 }
 
@@ -370,6 +374,10 @@ func fetchBySessionId(sessionId string, lc *lambdacontext.LambdaContext) (*apimo
 		}
 	}
 
+	var locale string
+	if localeAttr, ok := res.Items[0][apimodel.LocaleColumnName]; ok {
+		locale = *localeAttr.S
+	}
 	userInfo := &apimodel.UserInfo{
 		UserId:              userId,
 		SessionId:           sessId,
@@ -380,6 +388,7 @@ func fetchBySessionId(sessionId string, lc *lambdacontext.LambdaContext) (*apimo
 		VerifyProvider:      provider,
 		VerifyRequestId:     requestId,
 		VerificationStartAt: verificationStartAt,
+		Locale:              locale,
 	}
 
 	anlogger.Debugf(lc, "complete.go : successfully fetch userInfo %v by sessionId [%s]", userInfo, sessionId)

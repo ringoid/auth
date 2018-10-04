@@ -13,11 +13,11 @@ type UserInfo struct {
 	VerifyProvider      string
 	VerifyRequestId     string
 	VerificationStartAt int64
+	Locale              string
 }
 
 func (model UserInfo) String() string {
-	return fmt.Sprintf("[UserInfo={userId=%s, sessionId=%s, countryCode=%d, phoneNumber=%s, customerId=%s, verifyProvider=%s, verifyRequestId=%s, verificationStartAt=%v}]",
-		model.UserId, model.SessionId, model.CountryCode, model.PhoneNumber, model.CustomerId, model.VerifyProvider, model.VerifyRequestId, model.VerificationStartAt)
+	return fmt.Sprintf("%#v", model)
 }
 
 type UserSettings struct {
@@ -33,8 +33,7 @@ type UserSettings struct {
 }
 
 func (model UserSettings) String() string {
-	return fmt.Sprintf("[UserSettings={userId=%s, whoCanSeePhoto=%s, safeDistanceInMeter=%v, pushMessages=%v, pushMatches=%v, pushLikes=%v, inAppMessages=%v, inAppMatches=%v, inAppLikes=%v}]",
-		model.UserId, model.WhoCanSeePhoto, model.SafeDistanceInMeter, model.PushMessages, model.PushMatches, model.PushLikes, model.InAppMessages, model.InAppMatches, model.InAppLikes)
+	return fmt.Sprintf("%#v", model)
 }
 
 func NewDefaultSettings(userId, sex string) *UserSettings {

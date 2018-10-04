@@ -19,8 +19,7 @@ type UserAcceptTermsEvent struct {
 }
 
 func (event UserAcceptTermsEvent) String() string {
-	return fmt.Sprintf("[UserAcceptTermsEvent={userId=%s, locale=%s, sourceIp=%s, clientValidationFail=%v, customerId=%s, unixTime=%v, dtTC=%v, dtPN=%v, dtLA=%v, eventType=%s}]",
-		event.UserId, event.Locale, event.SourceIp, event.ClientValidationFail, event.CustomerId, event.UnixTime, event.DateTimeTermsAndConditions, event.DateTimePrivacyNotes, event.DateTimeLegalAge, event.EventType)
+	return fmt.Sprintf("%#v", event)
 }
 
 func NewUserAcceptTermsEvent(req *StartReq, sourceIp, userId, customerId string) *UserAcceptTermsEvent {
@@ -45,20 +44,21 @@ type UserVerificationStart struct {
 	UserId         string `json:"userId"`
 	CountryCode    int    `json:"countryCode"`
 	VerifyProvider string `json:"verifyProvider"`
+	Locale         string `json:"locale"`
 	UnixTime       int64  `json:"unixTime"`
 	EventType      string `json:"eventType"`
 }
 
 func (event UserVerificationStart) String() string {
-	return fmt.Sprintf("[UserAcceptTermsEvent={userId=%s, countryCode=%d, verifyProvider=%s, unixTime=%v, eventType=%s}]",
-		event.UserId, event.CountryCode, event.VerifyProvider, event.UnixTime, event.EventType)
+	return fmt.Sprintf("%#v", event)
 }
 
-func NewUserVerificationStart(userId, provider string, country int) *UserVerificationStart {
+func NewUserVerificationStart(userId, provider, locale string, country int) *UserVerificationStart {
 	return &UserVerificationStart{
 		UserId:         userId,
 		VerifyProvider: provider,
 		CountryCode:    country,
+		Locale:         locale,
 		UnixTime:       time.Now().Unix(),
 		EventType:      "AUTH_USER_START_VERIFICATION",
 	}
@@ -69,21 +69,22 @@ type UserVerificationCompleteEvent struct {
 	CountryCode         int    `json:"countryCode"`
 	VerifyProvider      string `json:"verifyProvider"`
 	VerificationStartAt int64  `json:"verificationStartAt"`
+	Locale              string `json:"locale"`
 	UnixTime            int64  `json:"unixTime"`
 	EventType           string `json:"eventType"`
 }
 
 func (event UserVerificationCompleteEvent) String() string {
-	return fmt.Sprintf("[UserVerificationCompleteEvent={userId=%s, countryCode=%d, verifyProvider=%s, verificationStartAt=%v, unixTime=%v, eventType=%v}]",
-		event.UserId, event.CountryCode, event.VerifyProvider, event.VerificationStartAt, event.UnixTime, event.EventType)
+	return fmt.Sprintf("%#v", event)
 }
 
-func NewUserVerificationCompleteEvent(userId, provider string, country int, startAt int64) *UserVerificationCompleteEvent {
+func NewUserVerificationCompleteEvent(userId, provider, locale string, country int, startAt int64) *UserVerificationCompleteEvent {
 	return &UserVerificationCompleteEvent{
 		UserId:              userId,
 		CountryCode:         country,
 		VerifyProvider:      provider,
 		VerificationStartAt: startAt,
+		Locale:              locale,
 		UnixTime:            time.Now().Unix(),
 		EventType:           "AUTH_USER_COMPLETE_VERIFICATION",
 	}
@@ -98,8 +99,7 @@ type UserProfileCreatedEvent struct {
 }
 
 func (event UserProfileCreatedEvent) String() string {
-	return fmt.Sprintf("[UserProfileCreatedEvent={userId=%s, sex=%s, yearOfBirth=%v, unixTime=%v, eventType=%s}]",
-		event.UserId, event.Sex, event.YearOfBirth, event.UnixTime, event.EventType)
+	return fmt.Sprintf("%#v", event)
 }
 
 func NewUserProfileCreatedEvent(userId string, req *CreateReq) *UserProfileCreatedEvent {
@@ -127,8 +127,7 @@ type UserSettingsUpdatedEvent struct {
 }
 
 func (event UserSettingsUpdatedEvent) String() string {
-	return fmt.Sprintf("[UserSettingsUpdatedEvent={userId=%s, whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%v, inAppMessages=%v, inAppMatches=%v, inAppLikes=%v, unixTime=%v, eventType=%s}]",
-		event.UserId, event.WhoCanSeePhoto, event.SafeDistanceInMeter, event.PushMessages, event.PushMatches, event.PushLikes, event.InAppMessages, event.InAppMatches, event.InAppLikes, event.UnixTime, event.EventType)
+	return fmt.Sprintf("%#v", event)
 }
 
 func NewUserSettingsUpdatedEvent(settings *UserSettings) *UserSettingsUpdatedEvent {
@@ -154,7 +153,7 @@ type UserLogoutEvent struct {
 }
 
 func (event UserLogoutEvent) String() string {
-	return fmt.Sprintf("[UserLogoutEvent={userId=%s, unixTime=%v, eventType=%s}]", event.UserId, event.UnixTime, event.EventType)
+	return fmt.Sprintf("%#v", event)
 }
 
 func NewUserLogoutEvent(userId string) *UserLogoutEvent {
@@ -173,7 +172,7 @@ type UserOnlineEvent struct {
 }
 
 func (event UserOnlineEvent) String() string {
-	return fmt.Sprintf("[UserOnlineEvent={userId=%s, unixTime=%v, eventType=%s}]", event.UserId, event.UnixTime, event.EventType)
+	return fmt.Sprintf("%#v", event)
 }
 
 func NewUserOnlineEvent(userId string) *UserOnlineEvent {
