@@ -187,19 +187,12 @@ func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.Lambd
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
-				"#whoCanSeePhoto":      aws.String(apimodel.WhoCanSeePhotoColumnName),
 				"#safeDistanceInMeter": aws.String(apimodel.SafeDistanceInMeterColumnName),
 				"#pushMessages":        aws.String(apimodel.PushMessagesColumnName),
 				"#pushMatches":         aws.String(apimodel.PushMatchesColumnName),
 				"#pushLikes":           aws.String(apimodel.PushLikesColumnName),
-				"#inAppMessages":       aws.String(apimodel.InAppMessagesColumnName),
-				"#inAppMatches":        aws.String(apimodel.InAppMatchesColumnName),
-				"#inAppLikes":          aws.String(apimodel.InAppLikesColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":whoCanSeePhotoV": {
-					S: aws.String(settings.WhoCanSeePhoto),
-				},
 				":safeDistanceInMeterV": {
 					N: aws.String(strconv.Itoa(settings.SafeDistanceInMeter)),
 				},
@@ -212,15 +205,6 @@ func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.Lambd
 				":pushLikesV": {
 					S: aws.String(settings.PushLikes),
 				},
-				":inAppMessagesV": {
-					BOOL: aws.Bool(settings.InAppMessages),
-				},
-				":inAppMatchesV": {
-					BOOL: aws.Bool(settings.InAppMatches),
-				},
-				":inAppLikesV": {
-					S: aws.String(settings.InAppLikes),
-				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
 				apimodel.UserIdColumnName: {
@@ -229,7 +213,7 @@ func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.Lambd
 			},
 
 			TableName:        aws.String(userSettingsTable),
-			UpdateExpression: aws.String("SET #whoCanSeePhoto = :whoCanSeePhotoV, #safeDistanceInMeter = :safeDistanceInMeterV, #pushMessages = :pushMessagesV, #pushMatches = :pushMatchesV, #pushLikes = :pushLikesV, #inAppMessages = :inAppMessagesV, #inAppMatches = :inAppMatchesV, #inAppLikes = :inAppLikesV"),
+			UpdateExpression: aws.String("SET #safeDistanceInMeter = :safeDistanceInMeterV, #pushMessages = :pushMessagesV, #pushMatches = :pushMatchesV, #pushLikes = :pushLikesV"),
 		}
 
 	_, err := awsDbClient.UpdateItem(input)

@@ -45,14 +45,10 @@ const (
 	UpdatedTimeColumnName    = "updated_at"
 	LastOnlineTimeColumnName = "last_online_time"
 
-	WhoCanSeePhotoColumnName      = "who_can_see_photo"
 	SafeDistanceInMeterColumnName = "safe_distance_in_meter"
 	PushMessagesColumnName        = "push_messages"
 	PushMatchesColumnName         = "push_matches"
 	PushLikesColumnName           = "push_likes"
-	InAppMessagesColumnName       = "in_app_messages"
-	InAppMatchesColumnName        = "in_app_matches"
-	InAppLikesColumnName          = "in_app_likes"
 
 	AccessTokenUserIdClaim       = "userId"
 	AccessTokenSessionTokenClaim = "sessionToken"

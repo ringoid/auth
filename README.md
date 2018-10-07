@@ -130,7 +130,6 @@ Body:
 
     {
         "accessToken":"adasdasd-fadfs-sdffd",
-        "whoCanSeePhoto":"OPPOSITE", // possible values OPPOSITE/INCOGNITO/ONLY_ME
         "safeDistanceInMeter":0,
         "pushMessages":true,
         "pushMatches":true,
@@ -263,18 +262,14 @@ Possible errorCodes:
 5. AUTH_USER_SETTINGS_UPDATED
 
 * userId - string
-* whoCanSeePhoto  - string
 * safeDistanceInMeter - int
 * pushMessages - bool
 * pushMatches - bool
 * pushLikes - string
-* inAppMessages - bool
-* inAppMatches - bool
-* inAppLikes - string
 * unixTime - int
 * eventType - string (AUTH_USER_SETTINGS_UPDATED)
 
-`{"userId":"aslkdl-asfmfa-asd","whoCanSeePhoto":"OPPOSITE","safeDistanceInMeter":0,"pushMessages":true,"pushMatches":true,"pushLikes":"EVERY","unixTime":1534338646,"inAppMessages":true, "inAppMatches":true, "inAppLikes":"EVERY", "eventType":"AUTH_USER_SETTINGS_UPDATED"}`
+`{"userId":"aslkdl-asfmfa-asd","safeDistanceInMeter":0,"pushMessages":true,"pushMatches":true,"pushLikes":"EVERY","unixTime":1534338646, "eventType":"AUTH_USER_SETTINGS_UPDATED"}`
 
 6. AUTH_USER_LOGOUT
 

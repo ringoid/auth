@@ -114,14 +114,10 @@ func NewUserProfileCreatedEvent(userId string, req *CreateReq) *UserProfileCreat
 
 type UserSettingsUpdatedEvent struct {
 	UserId              string `json:"userId"`
-	WhoCanSeePhoto      string `json:"whoCanSeePhoto"`      //OPPOSITE (default) || INCOGNITO || ONLY_ME
 	SafeDistanceInMeter int    `json:"safeDistanceInMeter"` // 0 (default for men) || 10 (default for women)
 	PushMessages        bool   `json:"pushMessages"`        // true (default for men) || false (default for women)
 	PushMatches         bool   `json:"pushMatches"`         // true (default)
 	PushLikes           string `json:"pushLikes"`           //EVERY (default for men) || 10_NEW (default for women) || 100_NEW
-	InAppMessages       bool   `json:"inAppMessages"`       //true (default for everybody)
-	InAppMatches        bool   `json:"inAppMatches"`        //true (default for everybody)
-	InAppLikes          string `json:"inAppLikes"`          //EVERY (default for everybody) || 10_NEW (default for women) || 100_NEW || NONE
 	UnixTime            int64  `json:"unixTime"`
 	EventType           string `json:"eventType"`
 }
@@ -133,14 +129,10 @@ func (event UserSettingsUpdatedEvent) String() string {
 func NewUserSettingsUpdatedEvent(settings *UserSettings) *UserSettingsUpdatedEvent {
 	return &UserSettingsUpdatedEvent{
 		UserId:              settings.UserId,
-		WhoCanSeePhoto:      settings.WhoCanSeePhoto,
 		SafeDistanceInMeter: settings.SafeDistanceInMeter,
 		PushMessages:        settings.PushMessages,
 		PushMatches:         settings.PushMatches,
 		PushLikes:           settings.PushLikes,
-		InAppMessages:       settings.InAppMessages,
-		InAppMatches:        settings.InAppMatches,
-		InAppLikes:          settings.InAppLikes,
 		UnixTime:            time.Now().Unix(),
 		EventType:           "AUTH_USER_SETTINGS_UPDATED",
 	}
