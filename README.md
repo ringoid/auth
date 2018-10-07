@@ -11,6 +11,7 @@ POST request
 
 Headers:
 
+* X-Ringoid-App-Version : 1       //int
 * Content-Type : application/json
 
 Body:
@@ -46,6 +47,7 @@ Possible errorCodes:
 * WrongRequestParamsClientError
 * PhoneNumberClientError
 * CountryCallingCodeClientError
+* TooOldAppVersionClientError
 
 ### Complete auth
 
@@ -55,6 +57,7 @@ POST request
 
 Headers:
 
+* X-Ringoid-App-Version : 1       //int
 * Content-Type : application/json
 
 Body:
@@ -82,6 +85,7 @@ Possible errorCodes:
 * WrongSessionIdClientError
 * NoPendingVerificationClientError
 * WrongVerificationCodeClientError
+* TooOldAppVersionClientError
 
 ### Create user profile
 
@@ -91,6 +95,7 @@ POST request
 
 Headers:
 
+* X-Ringoid-App-Version : 1       //int
 * Content-Type : application/json
 
 Body:
@@ -117,6 +122,7 @@ Possible errorCodes:
 * WrongSexClientError
 * WrongRequestParamsClientError
 * InvalidAccessTokenClientError
+* TooOldAppVersionClientError
 
 ### Update user's settings
 
@@ -126,6 +132,7 @@ POST request
 
 Headers:
 
+* X-Ringoid-App-Version : 1       //int
 * Content-Type : application/json
 
 Body:
@@ -152,6 +159,7 @@ Possible errorCodes:
 * InternalServerError
 * WrongRequestParamsClientError
 * InvalidAccessTokenClientError
+* TooOldAppVersionClientError
 
 ### Logout user
 
@@ -161,6 +169,7 @@ POST request
 
 Headers:
 
+* X-Ringoid-App-Version : 1       //int
 * Content-Type : application/json
 
 Body
@@ -182,6 +191,7 @@ Possible errorCodes:
 * InternalServerError
 * WrongRequestParamsClientError
 * InvalidAccessTokenClientError
+* TooOldAppVersionClientError
 
 ### Get user's settings
 
@@ -191,6 +201,7 @@ GET request
 
 Headers:
 
+* X-Ringoid-App-Version : 1       //int
 * Content-Type : application/json
 
  Response Body:
@@ -210,6 +221,7 @@ Possible errorCodes:
 * InternalServerError
 * WrongRequestParamsClientError
 * InvalidAccessTokenClientError
+* TooOldAppVersionClientError
 
 ## Analytics Events
 

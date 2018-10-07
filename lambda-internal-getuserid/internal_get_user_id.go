@@ -92,7 +92,7 @@ func handler(ctx context.Context, request apimodel.InternalGetUserIdReq) (apimod
 
 	resp := apimodel.InternalGetUserIdResp{}
 
-	userId, ok, errStr := apimodel.Login(request.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
+	userId, ok, errStr := apimodel.Login(request.AppVersion, request.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", errStr)
 

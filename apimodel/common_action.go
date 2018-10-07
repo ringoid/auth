@@ -18,6 +18,7 @@ import (
 	"time"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
+	"strconv"
 )
 
 //return userId, sessionToken, ok, error string
@@ -243,10 +244,15 @@ func UpdateLastOnlineTime(userId, userProfileTableName string, awsDbClient *dyna
 }
 
 //return userId, ok and error string
-func Login(token, secretWord, userProfileTable, commonStreamName string, awsDbClient *dynamodb.DynamoDB, awsKinesisClient *kinesis.Kinesis,
+func Login(appVersion int, token, secretWord, userProfileTable, commonStreamName string, awsDbClient *dynamodb.DynamoDB, awsKinesisClient *kinesis.Kinesis,
 	anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (string, bool, string) {
 
-	anlogger.Debugf(lc, "common_action.go : login for token [%s]", token)
+	anlogger.Debugf(lc, "common_action.go : login for token [%s] with app version [%d]", token, appVersion)
+
+	if appVersion < MinimalAppVersion {
+		anlogger.Errorf(lc, "common_action.go : error, too old version [%d] when min version is [%d]", appVersion, MinimalAppVersion)
+		return "", false, TooOldAppVersionClientError
+	}
 
 	userId, sessionToken, ok, errStr := DecodeToken(token, secretWord, anlogger, lc)
 	if !ok {
@@ -273,7 +279,7 @@ func Login(token, secretWord, userProfileTable, commonStreamName string, awsDbCl
 		return "", ok, errStr
 	}
 
-	anlogger.Debugf(lc, "common_action.go : successfully login for token [%s]", token)
+	anlogger.Debugf(lc, "common_action.go : successfully login for token [%s] with app version [%d]", token, appVersion)
 	return userId, true, ""
 }
 
@@ -325,4 +331,22 @@ func SendCloudWatchMetric(baseCloudWatchNamespace, metricName string, value int,
 
 	anlogger.Debugf(lc, "common_action.go : successfully send value [%d] for namespace [%s] and metric name [%s]", value, baseCloudWatchNamespace, metricName)
 	return true, ""
+}
+
+func ParseAppVersionFromHeaders(headers map[string]string, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (int, bool, string) {
+	anlogger.Debugf(lc, "common_action.go : parse app version from the headers %v", headers)
+	var appVersionInt int
+	var err error
+	if appVersionStr, ok := headers[AppVersionHeaderName]; !ok {
+		anlogger.Errorf(lc, "common_action.go : error header [%s] is empty", AppVersionHeaderName)
+		return 0, false, WrongRequestParamsClientError
+	} else {
+		appVersionInt, err = strconv.Atoi(appVersionStr)
+		if err != nil {
+			anlogger.Errorf(lc, "common_action.go : error converting header [%s] with value [%s] to int : %v", AppVersionHeaderName, appVersionStr, err)
+			return 0, false, WrongRequestParamsClientError
+		}
+	}
+	anlogger.Debugf(lc, "common_action.go : successfully parse app version [%d] from the headers %v", appVersionInt, headers)
+	return appVersionInt, true, ""
 }

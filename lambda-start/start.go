@@ -115,6 +115,12 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{}, nil
 	}
 
+	_, ok, errStr := apimodel.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
+	if !ok {
+		anlogger.Errorf(lc, "start.go : return %s to client", errStr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+	}
+
 	reqParam, ok := parseParams(request.Body, lc)
 	if !ok {
 		strErr := apimodel.WrongRequestParamsClientError
