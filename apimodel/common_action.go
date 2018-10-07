@@ -192,11 +192,15 @@ func WarmUpLambda(functionName string, clientLambda *lambda.Lambda, anlogger *sy
 
 func IsItWarmUpRequest(body string, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) bool {
 	anlogger.Debugf(lc, "common_action.go : is it warm up request, body [%s]", body)
+	if len(body) == 0 {
+		anlogger.Debugf(lc, "common_action.go : empty request body, it's no warm up request")
+		return false
+	}
 	var req WarmUpRequest
 	err := json.Unmarshal([]byte(body), &req)
 
 	if err != nil {
-		anlogger.Errorf(lc, "common_action.go : error unmarshal required params from the string %s : %v", body, err)
+		anlogger.Errorf(lc, "common_action.go : error unmarshal required params from the string [%s] : %v", body, err)
 		return false
 	}
 	result := req.WarmUpRequest

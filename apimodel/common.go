@@ -83,10 +83,14 @@ func (resp BaseResponse) String() string {
 	return fmt.Sprintf("[BaseResponse={errorCode=%s, errorMessage=%s}", resp.ErrorCode, resp.ErrorMessage)
 }
 
+//map contains mapping between country calling code and verification provider
 var RoutingRuleMap map[int]string
 
 func init() {
 	RoutingRuleMap = make(map[int]string)
 	RoutingRuleMap[1] = Twilio
 	RoutingRuleMap[44] = Twilio
+
+	//used by default
+	RoutingRuleMap[-1] = Nexmo
 }

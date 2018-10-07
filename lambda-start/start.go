@@ -149,7 +149,8 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	provider, ok := apimodel.RoutingRuleMap[reqParam.CountryCallingCode]
 	if !ok {
-		provider = apimodel.Nexmo
+		//used default provider
+		provider = apimodel.RoutingRuleMap[-1]
 	}
 	anlogger.Debugf(lc, "start.go : chose verify provide [%s] for userId [%s]", provider, userId)
 
