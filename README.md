@@ -22,7 +22,9 @@ Body:
         "dtLA":1535120929, //unix time when Privacy Notes were accepted
         "dtPN":1535120929, //unix time when Legal age was confirmed
         "locale":"en",
-        "clientValidationFail":true
+        "clientValidationFail":true,
+        "deviceModel":"device model info",
+        "osVersion":"version of os"
     }
     
     all parameters are required
@@ -216,14 +218,16 @@ Possible errorCodes:
 * userId - string
 * sourceIp - string
 * unixTime - int
-* eventType - string (AUTH_USER_ACCEPT_TERMS)
 * locale - string
 * clientValidationFail - was phone number's validation failed on client side
 * dtTC - date and time when Terms and conditions were accepted
 * dtPN - date and time when Privacy Notes were accepted
 * dtLA - date and time when Legal age was confirmed
+* deviceModel - string (model of the device (Build.MODEL + "," + Build.MANUFACTURER + "," + Build.PRODUCT))
+* osVersion - string
+* eventType - string (AUTH_USER_ACCEPT_TERMS)
 
-`{"userId":"aslkdl-asfmfa-asd","sourceIp":"82.102.27.75","unixTime":1534338646,"dtTC":1535120929,"dtPN":1535120929,"dtLA":1535120929,locale":"","clientValidationFail":true,"eventType":"AUTH_USER_ACCEPT_TERMS"}`
+`{"deviceModel":"device model","osVersion":"2.2","userId":"aslkdl-asfmfa-asd","sourceIp":"82.102.27.75","unixTime":1534338646,"dtTC":1535120929,"dtPN":1535120929,"dtLA":1535120929,locale":"","clientValidationFail":true,"eventType":"AUTH_USER_ACCEPT_TERMS"}`
 
 2. AUTH_USER_START_VERIFICATION
 

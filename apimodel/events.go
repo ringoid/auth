@@ -16,6 +16,8 @@ type UserAcceptTermsEvent struct {
 	DateTimePrivacyNotes       int64  `json:"dtPN"`
 	DateTimeLegalAge           int64  `json:"dtLA"`
 	CustomerId                 string `json:"customerId"`
+	DeviceModel                string `json:"deviceModel"`
+	OsVersion                  string `json:"osVersion"`
 }
 
 func (event UserAcceptTermsEvent) String() string {
@@ -35,6 +37,8 @@ func NewUserAcceptTermsEvent(req *StartReq, sourceIp, userId, customerId string)
 		DateTimeLegalAge:           req.DateTimeLegalAge,
 		DateTimePrivacyNotes:       req.DateTimePrivacyNotes,
 		DateTimeTermsAndConditions: req.DateTimeTermsAndConditions,
+		DeviceModel:                req.DeviceModel,
+		OsVersion:                  req.OsVersion,
 
 		EventType: "AUTH_USER_ACCEPT_TERMS",
 	}

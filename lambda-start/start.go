@@ -163,6 +163,8 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		CustomerId:     customerId.String(),
 		VerifyProvider: provider,
 		Locale:         reqParam.Locale,
+		DeviceModel:    reqParam.DeviceModel,
+		OsVersion:      reqParam.OsVersion,
 	}
 
 	resUserId, resSessionId, resCustomerId, wasCreated, ok, errStr := createUserInfo(userInfo, lc)
@@ -180,7 +182,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		resp.SessionId = resSessionId
 		resp.CustomerId = resCustomerId
 	} else {
-		newSessionId, resultUserId, resCustomerId, ok, errStr := updateUserDataWithSessionId(userInfo.Phone, userInfo.SessionId, userInfo.VerifyProvider, userInfo.Locale, lc)
+		newSessionId, resultUserId, resCustomerId, ok, errStr := updateUserDataWithSessionId(userInfo, lc)
 		if !ok {
 			anlogger.Errorf(lc, "start.go : return %s to client", errStr)
 			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
@@ -266,8 +268,8 @@ func generateUserId(phone string, lc *lambdacontext.LambdaContext) (string, bool
 }
 
 //return updated sessionId, userId, customerId is everything ok and error string
-func updateUserDataWithSessionId(phone, sessionId, provider, locale string, lc *lambdacontext.LambdaContext) (string, string, string, bool, string) {
-	anlogger.Debugf(lc, "start.go : update sessionId [%s], provider [%s], locale [%s] for phone [%s]", sessionId, provider, locale, phone)
+func updateUserDataWithSessionId(info *apimodel.UserInfo, lc *lambdacontext.LambdaContext) (string, string, string, bool, string) {
+	anlogger.Debugf(lc, "start.go : update user data %v", info)
 
 	input :=
 		&dynamodb.UpdateItemInput{
@@ -281,13 +283,13 @@ func updateUserDataWithSessionId(phone, sessionId, provider, locale string, lc *
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":sV": {
-					S: aws.String(fmt.Sprint(sessionId)),
+					S: aws.String(fmt.Sprint(info.SessionId)),
 				},
 				":tV": {
 					S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
 				},
 				":providerV": {
-					S: aws.String(provider),
+					S: aws.String(info.VerifyProvider),
 				},
 				":verifyStatusV": {
 					S: aws.String("start"),
@@ -296,12 +298,12 @@ func updateUserDataWithSessionId(phone, sessionId, provider, locale string, lc *
 					N: aws.String(fmt.Sprintf("%v", time.Now().Unix())),
 				},
 				":localeV": {
-					S: aws.String(locale),
+					S: aws.String(info.Locale),
 				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
 				apimodel.PhoneColumnName: {
-					S: aws.String(phone),
+					S: aws.String(info.Phone),
 				},
 			},
 			TableName:        aws.String(userTableName),
@@ -311,7 +313,7 @@ func updateUserDataWithSessionId(phone, sessionId, provider, locale string, lc *
 
 	res, err := awsDbClient.UpdateItem(input)
 	if err != nil {
-		anlogger.Errorf(lc, "start.go : error while update sessionId [%s], provider [%s], locale [%s] for phone [%s] : %v", sessionId, provider, locale, phone, err)
+		anlogger.Errorf(lc, "start.go : error while update user data %v : %v", info, err)
 		return "", "", "", false, apimodel.InternalServerError
 	}
 
@@ -319,7 +321,7 @@ func updateUserDataWithSessionId(phone, sessionId, provider, locale string, lc *
 	resultUserId := *res.Attributes[apimodel.UserIdColumnName].S
 	resultCustomerId := *res.Attributes[apimodel.CustomerIdColumnName].S
 
-	anlogger.Debugf(lc, "start.go : successfully update sessionId [%s], provider [%s], locale [%s] for phone [%s], userId [%s] and customerId [%s]", resultSessionId, provider, locale, phone, resultUserId, resultCustomerId)
+	anlogger.Debugf(lc, "start.go : successfully update user data %v", info)
 
 	return resultSessionId, resultUserId, resultCustomerId, true, ""
 }
@@ -384,6 +386,8 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 				"#verifyStatus":  aws.String(apimodel.VerificationStatusColumnName),
 				"#verifyStartAt": aws.String(apimodel.VerificationStartAtColumnName),
 				"#locale":        aws.String(apimodel.LocaleColumnName),
+				"#device":        aws.String(apimodel.DeviceModelColumnName),
+				"#os":            aws.String(apimodel.OsVersionColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":uV": {
@@ -417,6 +421,12 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 				":localeV": {
 					S: aws.String(userInfo.Locale),
 				},
+				":deviceV": {
+					S: aws.String(userInfo.DeviceModel),
+				},
+				":osV": {
+					S: aws.String(userInfo.OsVersion),
+				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
 				apimodel.PhoneColumnName: {
@@ -426,7 +436,7 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", apimodel.PhoneColumnName)),
 
 			TableName:        aws.String(userTableName),
-			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV, #customerId = :cIdV, #provider = :providerV, #verifyStatus = :verifyStatusV, #verifyStartAt = :verifyStartAtV, #locale = :localeV"),
+			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV, #customerId = :cIdV, #provider = :providerV, #verifyStatus = :verifyStatusV, #verifyStartAt = :verifyStartAtV, #locale = :localeV, #device = :deviceV, #os = :osV"),
 			ReturnValues:     aws.String("ALL_NEW"),
 		}
 
@@ -461,7 +471,8 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Star
 	}
 
 	if req.CountryCallingCode == 0 || req.Phone == "" || req.DateTimeTermsAndConditions == 0 ||
-		req.DateTimePrivacyNotes == 0 || req.DateTimeLegalAge == 0 || req.Locale == "" {
+		req.DateTimePrivacyNotes == 0 || req.DateTimeLegalAge == 0 || req.Locale == "" ||
+		req.DeviceModel == "" || req.OsVersion == "" {
 		anlogger.Errorf(lc, "start.go : one of the required param is nil, req %v", req)
 		return nil, false
 	}

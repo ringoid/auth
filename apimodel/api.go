@@ -9,7 +9,7 @@ type WarmUpRequest struct {
 }
 
 func (req WarmUpRequest) String() string {
-	return fmt.Sprintf("[WarmUpRequest={warmUpRequest=%s}]", req.WarmUpRequest)
+	return fmt.Sprintf("%#v", req)
 }
 
 //Request - Response model
@@ -20,7 +20,7 @@ type AuthResp struct {
 }
 
 func (resp AuthResp) String() string {
-	return fmt.Sprintf("[%v, AuthResp={sessionId=%s, customerId=%s}]", resp.BaseResponse, resp.SessionId, resp.CustomerId)
+	return fmt.Sprintf("%#v", resp)
 }
 
 type StartReq struct {
@@ -32,11 +32,12 @@ type StartReq struct {
 	DateTimeTermsAndConditions int64  `json:"dtTC"`
 	DateTimePrivacyNotes       int64  `json:"dtPN"`
 	DateTimeLegalAge           int64  `json:"dtLA"`
+	DeviceModel                string `json:"deviceModel"`
+	OsVersion                  string `json:"osVersion"`
 }
 
 func (req StartReq) String() string {
-	return fmt.Sprintf("[StartReq={countryCallingCode=%s, phone=%s, clientValidationFail=%s, locale=%s, dtTC=%v, dtPN=%v, dtLA=%v}]",
-		req.CountryCallingCode, req.Phone, req.ClientValidationFail, req.Locale, req.DateTimeTermsAndConditions, req.DateTimePrivacyNotes, req.DateTimeLegalAge)
+	return fmt.Sprintf("%#v", req)
 }
 
 type VerifyReq struct {
@@ -46,7 +47,7 @@ type VerifyReq struct {
 }
 
 func (req VerifyReq) String() string {
-	return fmt.Sprintf("[VerifyReq={sessionId=%s, verificationCode=%s}]", req.SessionId, req.VerificationCode)
+	return fmt.Sprintf("%#v", req)
 }
 
 type VerifyResp struct {
@@ -56,7 +57,7 @@ type VerifyResp struct {
 }
 
 func (resp VerifyResp) GoString() string {
-	return fmt.Sprintf("[%v, VerifyResp={accessToken=%s, accountAlreadyExist=%s}]", resp.BaseResponse, resp.AccessToken, resp.AccountAlreadyExist)
+	return fmt.Sprintf("%#v", resp)
 }
 
 type CreateReq struct {
@@ -67,16 +68,16 @@ type CreateReq struct {
 }
 
 func (req CreateReq) String() string {
-	return fmt.Sprintf("[CreateReq={accessToken=%s, yearOfBirth=%s, sex=%s}]", req.AccessToken, req.YearOfBirth, req.Sex)
+	return fmt.Sprintf("%#v", req)
 }
 
 type InternalGetUserIdReq struct {
 	WarmUpRequest bool   `json:"warmUpRequest"`
-	AccessToken string `json:"accessToken"`
+	AccessToken   string `json:"accessToken"`
 }
 
 func (req InternalGetUserIdReq) String() string {
-	return fmt.Sprintf("[InternalGetUserIdReq={accessToken=%s}]", req.AccessToken)
+	return fmt.Sprintf("%#v", req)
 }
 
 type InternalGetUserIdResp struct {
@@ -85,7 +86,7 @@ type InternalGetUserIdResp struct {
 }
 
 func (resp InternalGetUserIdResp) String() string {
-	return fmt.Sprintf("[%v, InternalGetUserIdResp={userId=%s}]", resp.BaseResponse, resp.UserId)
+	return fmt.Sprintf("%#v", resp)
 }
 
 type UpdateSettingsReq struct {
@@ -99,8 +100,7 @@ type UpdateSettingsReq struct {
 }
 
 func (req UpdateSettingsReq) String() string {
-	return fmt.Sprintf("[UpdateSettingsReq={accessToken=%s, whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%s}]",
-		req.AccessToken, req.WhoCanSeePhoto, req.SafeDistanceInMeter, req.PushMessages, req.PushMatches, req.PushLikes)
+	return fmt.Sprintf("%#v", req)
 }
 
 type GetSettingsResp struct {
@@ -113,8 +113,7 @@ type GetSettingsResp struct {
 }
 
 func (resp GetSettingsResp) String() string {
-	return fmt.Sprintf("[%v, GetSettingsResp={whoCanSeePhoto=%s, safeDistanceInMeter=%d, pushMessages=%v, pushMatches=%v, pushLikes=%s}]",
-		resp.BaseResponse, resp.WhoCanSeePhoto, resp.SafeDistanceInMeter, resp.PushMessages, resp.PushMatches, resp.PushLikes)
+	return fmt.Sprintf("%#v", resp)
 }
 
 type LogoutReq struct {
@@ -123,5 +122,5 @@ type LogoutReq struct {
 }
 
 func (req LogoutReq) String() string {
-	return fmt.Sprintf("[LogoutReq={accessToken=%s}]", req.AccessToken)
+	return fmt.Sprintf("%#v", req)
 }

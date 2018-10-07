@@ -41,6 +41,8 @@ const (
 	VerificationStatusColumnName  = "verify_status"
 	VerificationStartAtColumnName = "verification_start_at"
 	LocaleColumnName              = "locale"
+	DeviceModelColumnName         = "device"
+	OsVersionColumnName           = "os"
 
 	UpdatedTimeColumnName    = "updated_at"
 	LastOnlineTimeColumnName = "last_online_time"

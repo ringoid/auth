@@ -14,6 +14,8 @@ type UserInfo struct {
 	VerifyRequestId     string
 	VerificationStartAt int64
 	Locale              string
+	DeviceModel         string
+	OsVersion           string
 }
 
 func (model UserInfo) String() string {
