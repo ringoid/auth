@@ -115,8 +115,14 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{}, nil
 	}
 
-	_, ok, errStr := apimodel.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
+	appVersion, ok, errStr := apimodel.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
 	if !ok {
+		anlogger.Errorf(lc, "start.go : return %s to client", errStr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+	}
+	if appVersion < apimodel.MinimalAppVersion {
+		errStr := apimodel.TooOldAppVersionClientError
+		anlogger.Errorf(lc, "start.go : error, too old version [%d] when min version is [%d]", appVersion, apimodel.MinimalAppVersion)
 		anlogger.Errorf(lc, "start.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}

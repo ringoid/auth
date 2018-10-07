@@ -168,11 +168,6 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Upda
 		return nil, false, apimodel.InternalServerError
 	}
 
-	if req.WhoCanSeePhoto != "OPPOSITE" && req.WhoCanSeePhoto != "INCOGNITO" && req.WhoCanSeePhoto != "ONLY_ME" {
-		anlogger.Errorf(lc, "update_settings.go : wrong whoCanSeePhoto [%s] request param, req %v", req.WhoCanSeePhoto, req)
-		return nil, false, apimodel.WrongRequestParamsClientError
-	}
-
 	if req.SafeDistanceInMeter < 0 {
 		anlogger.Errorf(lc, "update_settings.go : wrong safeDistanceInMeter [%d] request param, req %v", req.SafeDistanceInMeter, req)
 		return nil, false, apimodel.WrongRequestParamsClientError

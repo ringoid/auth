@@ -101,6 +101,13 @@ func handler(ctx context.Context, request apimodel.InternalGetUserIdReq) (apimod
 			resp.ErrorMessage = "Invalid access token"
 			return resp, nil
 		}
+
+		if strings.Contains(errStr, "TooOldAppVersionClientError") {
+			resp.ErrorCode = "TooOldAppVersionClientError"
+			resp.ErrorMessage = "Too old app version"
+			return resp, nil
+		}
+
 		resp.ErrorCode = "InternalServerError"
 		resp.ErrorMessage = "Internal Server Error"
 		return resp, nil

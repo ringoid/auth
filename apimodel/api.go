@@ -93,7 +93,6 @@ func (resp InternalGetUserIdResp) String() string {
 type UpdateSettingsReq struct {
 	WarmUpRequest       bool   `json:"warmUpRequest"`
 	AccessToken         string `json:"accessToken"`
-	WhoCanSeePhoto      string `json:"whoCanSeePhoto"`      //OPPOSITE (default) || INCOGNITO || ONLY_ME
 	SafeDistanceInMeter int    `json:"safeDistanceInMeter"` // 0 (default for men) || 10 (default for women)
 	PushMessages        bool   `json:"pushMessages"`        // true (default for men) || false (default for women)
 	PushMatches         bool   `json:"pushMatches"`         // true (default)
@@ -106,7 +105,6 @@ func (req UpdateSettingsReq) String() string {
 
 type GetSettingsResp struct {
 	BaseResponse
-	WhoCanSeePhoto      string `json:"whoCanSeePhoto"`      //OPPOSITE (default) || INCOGNITO || ONLY_ME
 	SafeDistanceInMeter int    `json:"safeDistanceInMeter"` // 0 (default for men) || 10 (default for women)
 	PushMessages        bool   `json:"pushMessages"`        // true (default for men) || false (default for women)
 	PushMatches         bool   `json:"pushMatches"`         // true (default)
