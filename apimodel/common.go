@@ -55,8 +55,8 @@ const (
 	AccessTokenUserIdClaim       = "userId"
 	AccessTokenSessionTokenClaim = "sessionToken"
 
-	AndroidBuildNum = "X-Ringoid-Android-BuildNum"
-	iOSdBuildNum    = "X-Ringoid-iOS-BuildNum"
+	AndroidBuildNum = "x-ringoid-android-buildnum"
+	iOSdBuildNum    = "x-ringoid-ios-buildnum"
 
 	InternalServerError           = `{"errorCode":"InternalServerError","errorMessage":"Internal Server Error"}`
 	WrongRequestParamsClientError = `{"errorCode":"WrongParamsClientError","errorMessage":"Wrong request params"}`
