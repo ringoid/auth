@@ -74,7 +74,8 @@ func (req CreateReq) String() string {
 type InternalGetUserIdReq struct {
 	WarmUpRequest bool   `json:"warmUpRequest"`
 	AccessToken   string `json:"accessToken"`
-	AppVersion    int    `json:"appVersion"`
+	BuildNum      int    `json:"buildNum"`
+	IsItAndroid   bool   `json:"isItAndroid"`
 }
 
 func (req InternalGetUserIdReq) String() string {

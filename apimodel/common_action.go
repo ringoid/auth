@@ -244,14 +244,22 @@ func UpdateLastOnlineTime(userId, userProfileTableName string, awsDbClient *dyna
 }
 
 //return userId, ok and error string
-func Login(appVersion int, token, secretWord, userProfileTable, commonStreamName string, awsDbClient *dynamodb.DynamoDB, awsKinesisClient *kinesis.Kinesis,
+func Login(appVersion int, isItAndroid bool, token, secretWord, userProfileTable, commonStreamName string, awsDbClient *dynamodb.DynamoDB, awsKinesisClient *kinesis.Kinesis,
 	anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (string, bool, string) {
 
-	anlogger.Debugf(lc, "common_action.go : login for token [%s] with app version [%d]", token, appVersion)
+	anlogger.Debugf(lc, "common_action.go : login for token [%s] with app version [%d] and isItAndroid [%v]", token, appVersion, isItAndroid)
 
-	if appVersion < MinimalAppVersion {
-		anlogger.Errorf(lc, "common_action.go : error, too old version [%d] when min version is [%d]", appVersion, MinimalAppVersion)
-		return "", false, TooOldAppVersionClientError
+	switch isItAndroid {
+	case true:
+		if appVersion < MinimalAndroidBuildNum {
+			anlogger.Errorf(lc, "common_action.go : error, too old Android version [%d] when min version is [%d]", appVersion, MinimalAndroidBuildNum)
+			return "", false, TooOldAppVersionClientError
+		}
+	case false:
+		if appVersion < MinimaliOSBuildNum {
+			anlogger.Errorf(lc, "common_action.go : error, too old iOS version [%d] when min version is [%d]", appVersion, MinimaliOSBuildNum)
+			return "", false, TooOldAppVersionClientError
+		}
 	}
 
 	userId, sessionToken, ok, errStr := DecodeToken(token, secretWord, anlogger, lc)
@@ -333,20 +341,31 @@ func SendCloudWatchMetric(baseCloudWatchNamespace, metricName string, value int,
 	return true, ""
 }
 
-func ParseAppVersionFromHeaders(headers map[string]string, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (int, bool, string) {
-	anlogger.Debugf(lc, "common_action.go : parse app version from the headers %v", headers)
+//return buildnum, is it android, ok and error string
+func ParseAppVersionFromHeaders(headers map[string]string, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (int, bool, bool, string) {
+	anlogger.Debugf(lc, "common_action.go : parse build num from the headers %v", headers)
 	var appVersionInt int
 	var err error
-	if appVersionStr, ok := headers[AppVersionHeaderName]; !ok {
-		anlogger.Errorf(lc, "common_action.go : error header [%s] is empty", AppVersionHeaderName)
-		return 0, false, WrongRequestParamsClientError
-	} else {
+
+	if appVersionStr, ok := headers[AndroidBuildNum]; ok {
 		appVersionInt, err = strconv.Atoi(appVersionStr)
 		if err != nil {
-			anlogger.Errorf(lc, "common_action.go : error converting header [%s] with value [%s] to int : %v", AppVersionHeaderName, appVersionStr, err)
-			return 0, false, WrongRequestParamsClientError
+			anlogger.Errorf(lc, "common_action.go : error converting header [%s] with value [%s] to int : %v", AndroidBuildNum, appVersionStr, err)
+			return 0, false, false, WrongRequestParamsClientError
 		}
+		anlogger.Debugf(lc, "common_action.go : successfully parse Android build num [%d] from the headers %v", appVersionInt, headers)
+		return appVersionInt, true, true, ""
+
+	} else if appVersionStr, ok = headers[iOSdBuildNum]; ok {
+		appVersionInt, err = strconv.Atoi(appVersionStr)
+		if err != nil {
+			anlogger.Errorf(lc, "common_action.go : error converting header [%s] with value [%s] to int : %v", iOSdBuildNum, appVersionStr, err)
+			return 0, false, false, WrongRequestParamsClientError
+		}
+		anlogger.Debugf(lc, "common_action.go : successfully parse iOS build num [%d] from the headers %v", appVersionInt, headers)
+		return appVersionInt, false, true, ""
+	} else {
+		anlogger.Errorf(lc, "common_action.go : error header [%s] is empty", AndroidBuildNum)
+		return 0, false, false, WrongRequestParamsClientError
 	}
-	anlogger.Debugf(lc, "common_action.go : successfully parse app version [%d] from the headers %v", appVersionInt, headers)
-	return appVersionInt, true, ""
 }

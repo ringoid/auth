@@ -115,18 +115,27 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{}, nil
 	}
 
-	appVersion, ok, errStr := apimodel.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
+	appVersion, isItAndroid, ok, errStr := apimodel.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "start.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
-	if appVersion < apimodel.MinimalAppVersion {
-		errStr := apimodel.TooOldAppVersionClientError
-		anlogger.Errorf(lc, "start.go : error, too old version [%d] when min version is [%d]", appVersion, apimodel.MinimalAppVersion)
-		anlogger.Errorf(lc, "start.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+	switch isItAndroid {
+	case true:
+		if appVersion < apimodel.MinimalAndroidBuildNum {
+			errStr := apimodel.TooOldAppVersionClientError
+			anlogger.Errorf(lc, "start.go : error, too old Android version [%d] when min version is [%d]", appVersion, apimodel.MinimalAndroidBuildNum)
+			anlogger.Errorf(lc, "start.go : return %s to client", errStr)
+			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		}
+	case false:
+		if appVersion < apimodel.MinimaliOSBuildNum {
+			errStr := apimodel.TooOldAppVersionClientError
+			anlogger.Errorf(lc, "start.go : error, too old iOS version [%d] when min version is [%d]", appVersion, apimodel.MinimaliOSBuildNum)
+			anlogger.Errorf(lc, "start.go : return %s to client", errStr)
+			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		}
 	}
-
 	reqParam, ok := parseParams(request.Body, lc)
 	if !ok {
 		strErr := apimodel.WrongRequestParamsClientError

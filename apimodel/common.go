@@ -55,7 +55,8 @@ const (
 	AccessTokenUserIdClaim       = "userId"
 	AccessTokenSessionTokenClaim = "sessionToken"
 
-	AppVersionHeaderName = "X-Ringoid-App-Version"
+	AndroidBuildNum = "X-Ringoid-Android-BuildNum"
+	iOSdBuildNum    = "X-Ringoid-iOS-BuildNum"
 
 	InternalServerError           = `{"errorCode":"InternalServerError","errorMessage":"Internal Server Error"}`
 	WrongRequestParamsClientError = `{"errorCode":"WrongParamsClientError","errorMessage":"Wrong request params"}`
@@ -88,7 +89,8 @@ func (resp BaseResponse) String() string {
 //map contains mapping between country calling code and verification provider
 var RoutingRuleMap map[int]string
 
-var MinimalAppVersion = 1
+var MinimalAndroidBuildNum = 1
+var MinimaliOSBuildNum = 1
 
 func init() {
 	RoutingRuleMap = make(map[int]string)
