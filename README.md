@@ -11,7 +11,7 @@ POST request
 
 Headers:
 
-* X-Ringoid-Android-BuildNum : 1       //int, X-Ringoid-iOS-BuildNum in case of iOS
+* x-ringoid-android-buildnum : 1       //int, x-ringoid-ios-buildnum in case of iOS
 * Content-Type : application/json
 
 Body:
@@ -57,7 +57,7 @@ POST request
 
 Headers:
 
-* X-Ringoid-Android-BuildNum : 1       //int, X-Ringoid-iOS-BuildNum in case of iOS
+* x-ringoid-android-buildnum : 1       //int, x-ringoid-ios-buildnum in case of iOS
 * Content-Type : application/json
 
 Body:
@@ -95,7 +95,7 @@ POST request
 
 Headers:
 
-* X-Ringoid-Android-BuildNum : 1       //int, X-Ringoid-iOS-BuildNum in case of iOS
+* x-ringoid-android-buildnum : 1       //int, x-ringoid-ios-buildnum in case of iOS
 * Content-Type : application/json
 
 Body:
@@ -132,7 +132,7 @@ POST request
 
 Headers:
 
-* X-Ringoid-Android-BuildNum : 1       //int, X-Ringoid-iOS-BuildNum in case of iOS
+* x-ringoid-android-buildnum : 1       //int, x-ringoid-ios-buildnum in case of iOS
 * Content-Type : application/json
 
 Body:
@@ -169,7 +169,7 @@ POST request
 
 Headers:
 
-* X-Ringoid-Android-BuildNum : 1       //int, X-Ringoid-iOS-BuildNum in case of iOS
+* x-ringoid-android-buildnum : 1       //int, x-ringoid-ios-buildnum in case of iOS
 * Content-Type : application/json
 
 Body
@@ -201,7 +201,7 @@ GET request
 
 Headers:
 
-* X-Ringoid-Android-BuildNum : 1       //int, X-Ringoid-iOS-BuildNum in case of iOS
+* x-ringoid-android-buildnum : 1       //int, x-ringoid-ios-buildnum in case of iOS
 * Content-Type : application/json
 
  Response Body:
