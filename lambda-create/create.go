@@ -152,13 +152,14 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	settingsEvent := apimodel.NewUserSettingsUpdatedEvent(userSettings)
 	apimodel.SendAnalyticEvent(settingsEvent, userSettings.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
-	ok, errStr = apimodel.SendCommonEvent(event, userId, commonStreamName, awsKinesisClient, anlogger, lc)
+	partitionKey := userId
+	ok, errStr = apimodel.SendCommonEvent(event, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	ok, errStr = apimodel.SendCommonEvent(settingsEvent, userId, commonStreamName, awsKinesisClient, anlogger, lc)
+	ok, errStr = apimodel.SendCommonEvent(settingsEvent, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil

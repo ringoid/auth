@@ -107,7 +107,7 @@ func SendAnalyticEvent(event interface{}, userId, deliveryStreamName string, aws
 }
 
 //ok and error string
-func SendCommonEvent(event interface{}, userId, commonStreamName string, awsKinesisClient *kinesis.Kinesis,
+func SendCommonEvent(event interface{}, userId, commonStreamName, partitionKey string, awsKinesisClient *kinesis.Kinesis,
 	anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (bool, string) {
 	anlogger.Debugf(lc, "common_action.go : send common event [%v] for userId [%s]", event, userId)
 	data, err := json.Marshal(event)
@@ -115,9 +115,12 @@ func SendCommonEvent(event interface{}, userId, commonStreamName string, awsKine
 		anlogger.Errorf(lc, "common_action.go : error marshaling common event [%v] for userId [%s] : %v", event, userId, err)
 		return false, InternalServerError
 	}
+	if len(partitionKey) == 0 {
+		partitionKey = userId
+	}
 	input := &kinesis.PutRecordInput{
 		StreamName:   aws.String(commonStreamName),
-		PartitionKey: aws.String(userId),
+		PartitionKey: aws.String(partitionKey),
 		Data:         []byte(data),
 	}
 	_, err = awsKinesisClient.PutRecord(input)
@@ -282,7 +285,8 @@ func Login(appVersion int, isItAndroid bool, token, secretWord, userProfileTable
 	}
 
 	event := NewUserOnlineEvent(userId)
-	ok, errStr = SendCommonEvent(event, userId, commonStreamName, awsKinesisClient, anlogger, lc)
+	partitionKey := userId
+	ok, errStr = SendCommonEvent(event, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
 	if !ok {
 		return "", ok, errStr
 	}
