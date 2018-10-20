@@ -44,66 +44,64 @@ func init() {
 
 	env, ok = os.LookupEnv("ENV")
 	if !ok {
-		fmt.Printf("start.go : env can not be empty ENV")
+		fmt.Printf("lambda-initialization : start.go : env can not be empty ENV\n")
 		os.Exit(1)
 	}
-	fmt.Printf("start.go : start with ENV = [%s]", env)
+	fmt.Printf("lambda-initialization : start.go : start with ENV = [%s]\n", env)
 
 	papertrailAddress, ok = os.LookupEnv("PAPERTRAIL_LOG_ADDRESS")
 	if !ok {
-		fmt.Printf("start.go : env can not be empty PAPERTRAIL_LOG_ADDRESS")
+		fmt.Printf("lambda-initialization : start.go : env can not be empty PAPERTRAIL_LOG_ADDRESS\n")
 		os.Exit(1)
 	}
-	fmt.Printf("start.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]", papertrailAddress)
+	fmt.Printf("lambda-initialization : start.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
 	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "start-auth"))
 	if err != nil {
-		fmt.Errorf("start.go : error during startup : %v", err)
+		fmt.Errorf("lambda-initialization : start.go : error during startup : %v", err)
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "start.go : logger was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : start.go : logger was successfully initialized")
 
 	userTableName, ok = os.LookupEnv("USER_TABLE")
 	if !ok {
-		fmt.Printf("start.go : env can not be empty USER_TABLE")
-		os.Exit(1)
+		anlogger.Fatalf(nil, "lambda-initialization : start.go : env can not be empty USER_TABLE")
 	}
-	anlogger.Debugf(nil, "start.go : start with USER_TABLE = [%s]", userTableName)
+	anlogger.Debugf(nil, "lambda-initialization : start.go : start with USER_TABLE = [%s]", userTableName)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
 		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
-		anlogger.Fatalf(nil, "start.go : error during initialization : %v", err)
+		anlogger.Fatalf(nil, "lambda-initialization : start.go : error during initialization : %v", err)
 	}
-	anlogger.Debugf(nil, "start.go : aws session was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : start.go : aws session was successfully initialized")
 
 	twilioKey = apimodel.GetSecret(fmt.Sprintf(apimodel.TwilioSecretKeyBase, env), apimodel.TwilioApiKeyName, awsSession, anlogger, nil)
 	nexmoApiKey = apimodel.GetSecret(fmt.Sprintf(apimodel.NexmoSecretKeyBase, env), apimodel.NexmoApiKeyName, awsSession, anlogger, nil)
 	nexmoApiSecret = apimodel.GetSecret(fmt.Sprintf(apimodel.NexmoApiSecretKeyBase, env), apimodel.NexmoApiSecretKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
-	anlogger.Debugf(nil, "start.go : dynamodb client was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : start.go : dynamodb client was successfully initialized")
 
 	deliveryStreamName, ok = os.LookupEnv("DELIVERY_STREAM")
 	if !ok {
-		anlogger.Fatalf(nil, "start.go : env can not be empty DELIVERY_STREAM")
-		os.Exit(1)
+		anlogger.Fatalf(nil, "lambda-initialization : start.go : env can not be empty DELIVERY_STREAM")
 	}
-	anlogger.Debugf(nil, "start.go : start with DELIVERY_STREAM = [%s]", deliveryStreamName)
+	anlogger.Debugf(nil, "lambda-initialization : start.go : start with DELIVERY_STREAM = [%s]", deliveryStreamName)
 
 	awsDeliveryStreamClient = firehose.New(awsSession)
-	anlogger.Debugf(nil, "start.go : firehose client was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : start.go : firehose client was successfully initialized")
 
 	asyncTaskQueue, ok = os.LookupEnv("ASYNC_TASK_SQS_QUEUE")
 	if !ok {
-		fmt.Printf("start.go : env can not be empty ASYNC_TASK_SQS_QUEUE")
+		fmt.Printf("lambda-initialization : start.go : env can not be empty ASYNC_TASK_SQS_QUEUE")
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "start.go : start with ASYNC_TASK_SQS_QUEUE = [%s]", asyncTaskQueue)
+	anlogger.Debugf(nil, "lambda-initialization : start.go : start with ASYNC_TASK_SQS_QUEUE = [%s]", asyncTaskQueue)
 
 	awsSqsClient = sqs.New(awsSession)
-	anlogger.Debugf(nil, "start.go : sqs client was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : start.go : sqs client was successfully initialized")
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {

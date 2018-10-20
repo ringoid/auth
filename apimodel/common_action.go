@@ -133,7 +133,7 @@ func SendCommonEvent(event interface{}, userId, commonStreamName, partitionKey s
 }
 
 func GetSecret(secretBase, secretKeyName string, awsSession *session.Session, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) string {
-	anlogger.Debugf(lc, "common_action.go : read secret with secretBase [%s], secretKeyName [%s]", secretBase, secretKeyName)
+	anlogger.Debugf(lc, "lambda-initialization : common_action.go : read secret with secretBase [%s], secretKeyName [%s]", secretBase, secretKeyName)
 	svc := secretsmanager.New(awsSession)
 	input := &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(secretBase),
@@ -141,19 +141,19 @@ func GetSecret(secretBase, secretKeyName string, awsSession *session.Session, an
 
 	result, err := svc.GetSecretValue(input)
 	if err != nil {
-		anlogger.Fatalf(lc, "common_action.go : error reading %s secret from Secret Manager : %v", secretBase, err)
+		anlogger.Fatalf(lc, "lambda-initialization : common_action.go : error reading %s secret from Secret Manager : %v", secretBase, err)
 	}
 	var secretMap map[string]string
 	decoder := json.NewDecoder(strings.NewReader(*result.SecretString))
 	err = decoder.Decode(&secretMap)
 	if err != nil {
-		anlogger.Fatalf(lc, "common_action.go : error decode %s secret from Secret Manager : %v", secretBase, err)
+		anlogger.Fatalf(lc, "lambda-initialization : common_action.go : error decode %s secret from Secret Manager : %v", secretBase, err)
 	}
 	secret, ok := secretMap[secretKeyName]
 	if !ok {
-		anlogger.Fatalf(lc, "common_action.go : secret %s is empty", secretBase)
+		anlogger.Fatalf(lc, "lambda-initialization : common_action.go : secret %s is empty", secretBase)
 	}
-	anlogger.Debugf(lc, "common_action.go : secret %s was successfully initialized", secretBase)
+	anlogger.Debugf(lc, "lambda-initialization : common_action.go : secret %s was successfully initialized", secretBase)
 
 	return secret
 }

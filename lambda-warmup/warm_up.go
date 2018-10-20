@@ -28,42 +28,41 @@ func init() {
 
 	env, ok = os.LookupEnv("ENV")
 	if !ok {
-		fmt.Printf("warm_up_auth.go : env can not be empty ENV")
+		fmt.Printf("lambda-initialization : warm_up_auth.go : env can not be empty ENV\n")
 		os.Exit(1)
 	}
-	fmt.Printf("warm_up_auth.go : start with ENV = [%s]", env)
+	fmt.Printf("lambda-initialization : warm_up_auth.go : start with ENV = [%s]\n", env)
 
 	papertrailAddress, ok = os.LookupEnv("PAPERTRAIL_LOG_ADDRESS")
 	if !ok {
-		fmt.Printf("warm_up_auth.go : env can not be empty PAPERTRAIL_LOG_ADDRESS")
+		fmt.Printf("lambda-initialization : warm_up_auth.go : env can not be empty PAPERTRAIL_LOG_ADDRESS\n")
 		os.Exit(1)
 	}
-	fmt.Printf("warm_up_auth.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]", papertrailAddress)
+	fmt.Printf("lambda-initialization : warm_up_auth.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
 	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "warm-up-auth"))
 	if err != nil {
-		fmt.Errorf("warm_up_auth.go : error during startup : %v", err)
+		fmt.Errorf("lambda-initialization : warm_up_auth.go : error during startup : %v\n", err)
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "warm_up_auth.go : logger was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : warm_up_auth.go : logger was successfully initialized")
 
 	allLambdaNames, ok = os.LookupEnv("NEED_WARM_UP_LAMBDA_NAMES")
 	if !ok {
-		fmt.Printf("warm_up_auth.go : env can not be empty NEED_WARM_UP_LAMBDA_NAMES")
-		os.Exit(1)
+		anlogger.Errorf(nil, "lambda-initialization : warm_up_auth.go : env can not be empty NEED_WARM_UP_LAMBDA_NAMES")
 	}
-	anlogger.Debugf(nil, "warm_up_auth.go : start with NEED_WARM_UP_LAMBDA_NAMES = [%s]", allLambdaNames)
+	anlogger.Debugf(nil, "lambda-initialization : warm_up_auth.go : start with NEED_WARM_UP_LAMBDA_NAMES = [%s]", allLambdaNames)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
 		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
-		anlogger.Fatalf(nil, "warm_up_auth.go : error during initialization : %v", err)
+		anlogger.Fatalf(nil, "lambda-initialization : warm_up_auth.go : error during initialization : %v", err)
 	}
-	anlogger.Debugf(nil, "warm_up_auth.go : aws session was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : warm_up_auth.go : aws session was successfully initialized")
 
 	clientLambda = lambda.New(awsSession)
-	anlogger.Debugf(nil, "warm_up_auth.go : lambda client was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : warm_up_auth.go : lambda client was successfully initialized")
 }
 
 func handler(ctx context.Context, request events.CloudWatchEvent) error {

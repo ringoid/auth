@@ -46,46 +46,46 @@ func init() {
 
 	env, ok = os.LookupEnv("ENV")
 	if !ok {
-		fmt.Printf("complete.go : env can not be empty ENV")
+		fmt.Printf("lambda-initialization : complete.go : env can not be empty ENV\n")
 		os.Exit(1)
 	}
-	fmt.Printf("complete.go : start with ENV = [%s]", env)
+	fmt.Printf("lambda-initialization : complete.go : start with ENV = [%s]\n", env)
 
 	papertrailAddress, ok = os.LookupEnv("PAPERTRAIL_LOG_ADDRESS")
 	if !ok {
-		fmt.Printf("complete.go : env can not be empty PAPERTRAIL_LOG_ADDRESS")
+		fmt.Printf("lambda-initialization : complete.go : env can not be empty PAPERTRAIL_LOG_ADDRESS\n")
 		os.Exit(1)
 	}
-	fmt.Printf("complete.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]", papertrailAddress)
+	fmt.Printf("lambda-initialization : complete.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
 	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "complete-auth"))
 	if err != nil {
-		fmt.Errorf("complete.go : error during startup : %v", err)
+		fmt.Errorf("lambda-initialization : complete.go : error during startup : %v\n", err)
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "complete.go : logger was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : complete.go : logger was successfully initialized")
 
 	userTableName, ok = os.LookupEnv("USER_TABLE")
 	if !ok {
-		fmt.Printf("complete.go : env can not be empty USER_TABLE")
+		fmt.Printf("lambda-initialization : complete.go : env can not be empty USER_TABLE")
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "complete.go : start with USER_TABLE = [%s]", userTableName)
+	anlogger.Debugf(nil, "lambda-initialization : complete.go : start with USER_TABLE = [%s]", userTableName)
 
 	userProfileTable, ok = os.LookupEnv("USER_PROFILE_TABLE")
 	if !ok {
-		fmt.Printf("complete.go : env can not be empty USER_PROFILE_TABLE")
+		fmt.Printf("lambda-initialization : complete.go : env can not be empty USER_PROFILE_TABLE")
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "complete.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
+	anlogger.Debugf(nil, "lambda-initialization : complete.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
 		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
-		anlogger.Fatalf(nil, "complete.go : error during initialization : %v", err)
+		anlogger.Fatalf(nil, "lambda-initialization : complete.go : error during initialization : %v", err)
 	}
-	anlogger.Debugf(nil, "complete.go : aws session was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : complete.go : aws session was successfully initialized")
 
 	twilioKey = apimodel.GetSecret(fmt.Sprintf(apimodel.TwilioSecretKeyBase, env), apimodel.TwilioApiKeyName, awsSession, anlogger, nil)
 	secretWord = apimodel.GetSecret(fmt.Sprintf(apimodel.SecretWordKeyBase, env), apimodel.SecretWordKeyName, awsSession, anlogger, nil)
@@ -93,38 +93,38 @@ func init() {
 	nexmoApiSecret = apimodel.GetSecret(fmt.Sprintf(apimodel.NexmoApiSecretKeyBase, env), apimodel.NexmoApiSecretKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
-	anlogger.Debugf(nil, "complete.go : dynamodb client was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : complete.go : dynamodb client was successfully initialized")
 
 	deliveryStreamName, ok = os.LookupEnv("DELIVERY_STREAM")
 	if !ok {
-		anlogger.Fatalf(nil, "complete.go : env can not be empty DELIVERY_STREAM")
+		anlogger.Fatalf(nil, "lambda-initialization : complete.go : env can not be empty DELIVERY_STREAM")
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "complete.go : start with DELIVERY_STREAM = [%s]", deliveryStreamName)
+	anlogger.Debugf(nil, "lambda-initialization : complete.go : start with DELIVERY_STREAM = [%s]", deliveryStreamName)
 
 	awsDeliveryStreamClient = firehose.New(awsSession)
-	anlogger.Debugf(nil, "complete.go : firehose client was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : complete.go : firehose client was successfully initialized")
 
 	awsCWClient = cloudwatch.New(awsSession)
-	anlogger.Debugf(nil, "complete.go : cloudwatch client was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : complete.go : cloudwatch client was successfully initialized")
 
 	baseCloudWatchNamespace, ok = os.LookupEnv("BASE_CLOUD_WATCH_NAMESPACE")
 	if !ok {
-		anlogger.Fatalf(nil, "complete.go : env can not be empty BASE_CLOUD_WATCH_NAMESPACE")
+		anlogger.Fatalf(nil, "lambda-initialization : complete.go : env can not be empty BASE_CLOUD_WATCH_NAMESPACE")
 	}
-	anlogger.Debugf(nil, "complete.go : start with BASE_CLOUD_WATCH_NAMESPACE = [%s]", baseCloudWatchNamespace)
+	anlogger.Debugf(nil, "lambda-initialization : complete.go : start with BASE_CLOUD_WATCH_NAMESPACE = [%s]", baseCloudWatchNamespace)
 
 	nexmoCompleteMetricName, ok = os.LookupEnv("CLOUD_WATCH_NEXMO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME")
 	if !ok {
-		anlogger.Fatalf(nil, "complete.go : env can not be empty CLOUD_WATCH_NEXMO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME")
+		anlogger.Fatalf(nil, "lambda-initialization : complete.go : env can not be empty CLOUD_WATCH_NEXMO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME")
 	}
-	anlogger.Debugf(nil, "complete.go : start with CLOUD_WATCH_NEXMO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME = [%s]", nexmoCompleteMetricName)
+	anlogger.Debugf(nil, "lambda-initialization : complete.go : start with CLOUD_WATCH_NEXMO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME = [%s]", nexmoCompleteMetricName)
 
 	twilioCompleteMetricName, ok = os.LookupEnv("CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME")
 	if !ok {
-		anlogger.Fatalf(nil, "complete.go : env can not be empty CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME")
+		anlogger.Fatalf(nil, "lambda-initialization : complete.go : env can not be empty CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME")
 	}
-	anlogger.Debugf(nil, "complete.go : start with CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME = [%s]", twilioCompleteMetricName)
+	anlogger.Debugf(nil, "lambda-initialization : complete.go : start with CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME = [%s]", twilioCompleteMetricName)
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {

@@ -38,71 +38,70 @@ func init() {
 
 	env, ok = os.LookupEnv("ENV")
 	if !ok {
-		fmt.Printf("logout.go : env can not be empty ENV")
+		fmt.Printf("lambda-initialization : logout.go : env can not be empty ENV\n")
 		os.Exit(1)
 	}
-	fmt.Printf("logout.go : start with ENV = [%s]", env)
+	fmt.Printf("lambda-initialization : logout.go : start with ENV = [%s]\n", env)
 
 	papertrailAddress, ok = os.LookupEnv("PAPERTRAIL_LOG_ADDRESS")
 	if !ok {
-		fmt.Printf("logout.go : env can not be empty PAPERTRAIL_LOG_ADDRESS")
+		fmt.Printf("lambda-initialization : logout.go : env can not be empty PAPERTRAIL_LOG_ADDRESS\n")
 		os.Exit(1)
 	}
-	fmt.Printf("logout.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]", papertrailAddress)
+	fmt.Printf("lambda-initialization : logout.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
 	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "logout-auth"))
 	if err != nil {
-		fmt.Errorf("logout.go : error during startup : %v", err)
+		fmt.Errorf("lambda-initialization : logout.go : error during startup : %v\n", err)
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "logout.go : logger was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : logout.go : logger was successfully initialized")
 
 	userTableName, ok = os.LookupEnv("USER_TABLE")
 	if !ok {
-		fmt.Printf("logout.go : env can not be empty USER_TABLE")
-		os.Exit(1)
+		anlogger.Fatalf(nil, "lambda-initialization : logout.go : env can not be empty USER_TABLE")
 	}
-	anlogger.Debugf(nil, "logout.go : start with USER_TABLE = [%s]", userTableName)
+	anlogger.Debugf(nil, "lambda-initialization : logout.go : start with USER_TABLE = [%s]", userTableName)
 
 	userProfileTable, ok = os.LookupEnv("USER_PROFILE_TABLE")
 	if !ok {
-		fmt.Printf("logout.go : env can not be empty USER_PROFILE_TABLE")
+		anlogger.Fatalf(nil, "lambda-initialization : logout.go : env can not be empty USER_PROFILE_TABLE")
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "logout.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
+	anlogger.Debugf(nil, "lambda-initialization : logout.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
 		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
-		anlogger.Fatalf(nil, "logout.go : error during initialization : %v", err)
+		anlogger.Fatalf(nil, "lambda-initialization : logout.go : error during initialization : %v", err)
 	}
-	anlogger.Debugf(nil, "logout.go : aws session was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : logout.go : aws session was successfully initialized")
 
 	secretWord = apimodel.GetSecret(fmt.Sprintf(apimodel.SecretWordKeyBase, env), apimodel.SecretWordKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
-	anlogger.Debugf(nil, "logout.go : dynamodb client was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : logout.go : dynamodb client was successfully initialized")
 
 	deliveryStreamName, ok = os.LookupEnv("DELIVERY_STREAM")
 	if !ok {
-		anlogger.Fatalf(nil, "logout.go : env can not be empty DELIVERY_STREAM")
+		anlogger.Fatalf(nil, "lambda-initialization : logout.go : env can not be empty DELIVERY_STREAM")
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "logout.go : start with DELIVERY_STREAM = [%s]", deliveryStreamName)
+	anlogger.Debugf(nil, "lambda-initialization : logout.go : start with DELIVERY_STREAM = [%s]", deliveryStreamName)
 
 	awsDeliveryStreamClient = firehose.New(awsSession)
-	anlogger.Debugf(nil, "logout.go : firehose client was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : logout.go : firehose client was successfully initialized")
 
 	commonStreamName, ok = os.LookupEnv("COMMON_STREAM")
 	if !ok {
-		anlogger.Fatalf(nil, "logout.go : env can not be empty COMMON_STREAM")
+		anlogger.Fatalf(nil, "lambda-initialization : logout.go : env can not be empty COMMON_STREAM")
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "logout.go : start with COMMON_STREAM = [%s]", commonStreamName)
+	anlogger.Debugf(nil, "lambda-initialization : logout.go : start with COMMON_STREAM = [%s]", commonStreamName)
 
 	awsKinesisClient = kinesis.New(awsSession)
-	anlogger.Debugf(nil, "logout.go : kinesis client was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : logout.go : kinesis client was successfully initialized")
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {

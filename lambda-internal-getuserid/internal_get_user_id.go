@@ -31,54 +31,54 @@ func init() {
 
 	env, ok = os.LookupEnv("ENV")
 	if !ok {
-		fmt.Printf("internal_get_user_id.go : env can not be empty ENV")
+		fmt.Printf("lambda-initialization : internal_get_user_id.go : env can not be empty ENV\n")
 		os.Exit(1)
 	}
-	fmt.Printf("internal_get_user_id.go : start with ENV = [%s]", env)
+	fmt.Printf("lambda-initialization : internal_get_user_id.go : start with ENV = [%s]\n", env)
 
 	papertrailAddress, ok = os.LookupEnv("PAPERTRAIL_LOG_ADDRESS")
 	if !ok {
-		fmt.Printf("internal_get_user_id.go : env can not be empty PAPERTRAIL_LOG_ADDRESS")
+		fmt.Printf("lambda-initialization : internal_get_user_id.go : env can not be empty PAPERTRAIL_LOG_ADDRESS\n")
 		os.Exit(1)
 	}
-	fmt.Printf("internal_get_user_id.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]", papertrailAddress)
+	fmt.Printf("lambda-initialization : internal_get_user_id.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
 	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "internal-get-user-id-auth"))
 	if err != nil {
-		fmt.Errorf("internal_get_user_id.go : error during startup : %v", err)
+		fmt.Errorf("lambda-initialization :  internal_get_user_id.go : error during startup : %v\n", err)
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "internal_get_user_id.go : logger was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : internal_get_user_id.go : logger was successfully initialized")
 
 	userProfileTable, ok = os.LookupEnv("USER_PROFILE_TABLE")
 	if !ok {
-		fmt.Printf("internal_get_user_id.go : env can not be empty USER_PROFILE_TABLE")
+		fmt.Printf("lambda-initialization : internal_get_user_id.go : env can not be empty USER_PROFILE_TABLE")
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "internal_get_user_id.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
+	anlogger.Debugf(nil, "lambda-initialization : internal_get_user_id.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
 		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
-		anlogger.Fatalf(nil, "internal_get_user_id.go : error during initialization : %v", err)
+		anlogger.Fatalf(nil, "lambda-initialization : internal_get_user_id.go : error during initialization : %v", err)
 	}
-	anlogger.Debugf(nil, "internal_get_user_id.go : aws session was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : internal_get_user_id.go : aws session was successfully initialized")
 
 	secretWord = apimodel.GetSecret(fmt.Sprintf(apimodel.SecretWordKeyBase, env), apimodel.SecretWordKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
-	anlogger.Debugf(nil, "internal_get_user_id.go : dynamodb client was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : internal_get_user_id.go : dynamodb client was successfully initialized")
 
 	commonStreamName, ok = os.LookupEnv("COMMON_STREAM")
 	if !ok {
-		anlogger.Fatalf(nil, "internal_get_user_id.go : env can not be empty COMMON_STREAM")
+		anlogger.Fatalf(nil, "lambda-initialization : internal_get_user_id.go : env can not be empty COMMON_STREAM")
 		os.Exit(1)
 	}
-	anlogger.Debugf(nil, "internal_get_user_id.go : start with COMMON_STREAM = [%s]", commonStreamName)
+	anlogger.Debugf(nil, "lambda-initialization : internal_get_user_id.go : start with COMMON_STREAM = [%s]", commonStreamName)
 
 	awsKinesisClient = kinesis.New(awsSession)
-	anlogger.Debugf(nil, "internal_get_user_id.go : kinesis client was successfully initialized")
+	anlogger.Debugf(nil, "lambda-initialization : internal_get_user_id.go : kinesis client was successfully initialized")
 }
 
 func handler(ctx context.Context, request apimodel.InternalGetUserIdReq) (apimodel.InternalGetUserIdResp, error) {
@@ -115,7 +115,7 @@ func handler(ctx context.Context, request apimodel.InternalGetUserIdReq) (apimod
 
 	resp.UserId = userId
 
-	anlogger.Debugf(lc, "internal_get_user_id.go : successfully check access token and return userId response %v", resp)
+	anlogger.Debugf(lc, "internal_get_user_id.go : successfully check access token and return userId %s in a response", resp.UserId)
 
 	return resp, nil
 }
