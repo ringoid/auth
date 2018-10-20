@@ -107,6 +107,9 @@ Parameters:
   CloudWatchTwilioCompleteVerificationInTimeMetricName:
     Type: String
     Default: Twilio-CompleteVerificationInTime
+  CloudWatchNewUserWasCreatedMetricName:
+    Type: String
+    Default: NewUserWasCreated
 
 
 Globals:
@@ -134,7 +137,7 @@ Globals:
             CLOUD_WATCH_TWILIO_NOT_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME: !Ref CloudWatchTwilioNotCompleteVerificationInTimeMetricName
             CLOUD_WATCH_NEXMO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME: !Ref CloudWatchNexmoCompleteVerificationInTimeMetricName
             CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME: !Ref CloudWatchTwilioCompleteVerificationInTimeMetricName
-
+            CLOUD_WATCH_NEW_USER_WAS_CREATED: !Ref CloudWatchNewUserWasCreatedMetricName
         Tags:
           Company: Ringoid
           Service: auth

@@ -235,11 +235,13 @@ Possible errorCodes:
 * dtTC - date and time when Terms and conditions were accepted
 * dtPN - date and time when Privacy Notes were accepted
 * dtLA - date and time when Legal age was confirmed
-* deviceModel - string (model of the device (Build.MODEL + "," + Build.MANUFACTURER + "," + Build.PRODUCT))
-* osVersion - string
+* androidDeviceModel - string (model of the device (Build.MODEL + "," + Build.MANUFACTURER + "," + Build.PRODUCT))
+* androidOsVersion - string
+* iOsDeviceModel - string (model of the device (Build.MODEL + "," + Build.MANUFACTURER + "," + Build.PRODUCT))
+* iOsVersion - string
+* wasThisUserNew - bool
 * eventType - string (AUTH_USER_ACCEPT_TERMS)
 
-`{"deviceModel":"device model","osVersion":"2.2","userId":"aslkdl-asfmfa-asd","sourceIp":"82.102.27.75","unixTime":1534338646,"dtTC":1535120929,"dtPN":1535120929,"dtLA":1535120929,locale":"","clientValidationFail":true,"eventType":"AUTH_USER_ACCEPT_TERMS"}`
 
 2. AUTH_USER_START_VERIFICATION
 
@@ -249,9 +251,6 @@ Possible errorCodes:
 * locale - string
 * unixTime - int
 * eventType - string (AUTH_USER_START_VERIFICATION)
-
-`{"userId":"aslkdl-asfmfa-asd","countryCode":7,"verifyProvider":"Nexmo","locale":"ru","unixTime":1534338646,"eventType":"AUTH_USER_START_VERIFICATION"}`
-
 
 3. AUTH_USER_COMPLETE_VERIFICATION
 
@@ -263,8 +262,6 @@ Possible errorCodes:
 * unixTime - int
 * eventType - string (AUTH_USER_COMPLETE_VERIFICATION)
 
-`{"userId":"aslkdl-asfmfa-asd","countryCode":7,"verifyProvider":"Nexmo","verificationStartAt":123123123123,"locale":"ru","unixTime":1534338646,"eventType":"AUTH_USER_COMPLETE_VERIFICATION"}`
-
 4. AUTH_USER_PROFILE_CREATED
 
 * userId - string
@@ -272,8 +269,6 @@ Possible errorCodes:
 * yearOfBirth - int
 * unixTime - int
 * eventType - string (AUTH_USER_PROFILE_CREATED)
-
-`{"userId":"aslkdl-asfmfa-asd","sex":"male","yearOfBirth":"1982","unixTime":1534338646,"eventType":"AUTH_USER_PROFILE_CREATED"}`
 
 5. AUTH_USER_SETTINGS_UPDATED
 
@@ -285,12 +280,8 @@ Possible errorCodes:
 * unixTime - int
 * eventType - string (AUTH_USER_SETTINGS_UPDATED)
 
-`{"userId":"aslkdl-asfmfa-asd","safeDistanceInMeter":0,"pushMessages":true,"pushMatches":true,"pushLikes":"EVERY","unixTime":1534338646, "eventType":"AUTH_USER_SETTINGS_UPDATED"}`
-
 6. AUTH_USER_LOGOUT
 
 * userId - string
 * unixTime - int
 * eventType - string (AUTH_USER_LOGOUT)
-
-`{"userId":"aslkdl-asfmfa-asd", "unixTime":1534338646, "eventType":"AUTH_USER_LOGOUT"}`

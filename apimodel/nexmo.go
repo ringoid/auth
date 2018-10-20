@@ -70,6 +70,7 @@ func StartNexmoVerify(code int, number, apiKey, apiSecret, brand, userId string,
 			case "0":
 				requestId := nexmoResp["request_id"].(string)
 				anlogger.Debugf(lc, "nexmo.go : start verification request was successfully accepted by Nexmo for code [%d] and phone [%s], request_id [%s] for userId [%s]", code, number, requestId, userId)
+				anlogger.Infof(lc, "nexmo.go : sms was successfully sent for userId [%s]", userId)
 				return requestId, true, ""
 			case "10":
 				anlogger.Warnf(lc, "nexmo.go : start verification, concurrent verifications to the same number are not allowed for code [%d] and phone [%s] for userId [%s]", code, number, userId)

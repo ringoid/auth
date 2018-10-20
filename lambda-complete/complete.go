@@ -36,6 +36,7 @@ var awsCWClient *cloudwatch.CloudWatch
 var baseCloudWatchNamespace string
 var nexmoCompleteMetricName string
 var twilioCompleteMetricName string
+var newUserWasCreatedMetricName string
 
 func init() {
 	var env string
@@ -125,6 +126,12 @@ func init() {
 		anlogger.Fatalf(nil, "lambda-initialization : complete.go : env can not be empty CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME")
 	}
 	anlogger.Debugf(nil, "lambda-initialization : complete.go : start with CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME = [%s]", twilioCompleteMetricName)
+
+	newUserWasCreatedMetricName, ok = os.LookupEnv("CLOUD_WATCH_NEW_USER_WAS_CREATED")
+	if !ok {
+		anlogger.Fatalf(nil, "lambda-initialization : complete.go : env can not be empty CLOUD_WATCH_NEW_USER_WAS_CREATED")
+	}
+	anlogger.Debugf(nil, "lambda-initialization : complete.go : start with CLOUD_WATCH_NEW_USER_WAS_CREATED = [%s]", newUserWasCreatedMetricName)
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -232,6 +239,12 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		anlogger.Errorf(lc, "complete.go : userId [%s], return %s to client", userInfo.UserId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
 	}
+
+	if !userExist {
+		anlogger.Infof(lc, "complete.go : new user profile was created, userId [%s]", userInfo.UserId)
+		apimodel.SendCloudWatchMetric(baseCloudWatchNamespace, newUserWasCreatedMetricName, 1, awsCWClient, anlogger, lc)
+	}
+
 	//return OK with AccessToken
 	anlogger.Debugf(lc, "complete.go : return body=%s to client, userId [%s]", string(body), userInfo.UserId)
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
@@ -309,6 +322,7 @@ func updateSessionToken(userId, sessionToken, locale string, lc *lambdacontext.L
 		return false, false, apimodel.InternalServerError
 	}
 
+	//if table already contains sex column for this userId it means that we already had this user
 	_, ok := result.Attributes[apimodel.SexColumnName]
 
 	anlogger.Debugf(lc, "complete.go : successfully update sessionToken [%s] and locale [%s] for userId [%s]", sessionToken, locale, userId)

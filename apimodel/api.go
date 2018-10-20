@@ -34,6 +34,7 @@ type StartReq struct {
 	DateTimeLegalAge           int64  `json:"dtLA"`
 	DeviceModel                string `json:"deviceModel"`
 	OsVersion                  string `json:"osVersion"`
+	Android                    bool   `json:"android"`
 }
 
 func (req StartReq) String() string {

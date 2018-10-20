@@ -11,8 +11,8 @@ import (
 )
 
 //ok and error string
-func StartTwilioVerify(code int, number, locale, secretKey string, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "twillio.go : verify phone with code [%d] and phone [%s]", code, number)
+func StartTwilioVerify(code int, number, locale, secretKey, userId string, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "twillio.go : verify phone with code [%d] and phone [%s] for userId [%s]", code, number, userId)
 
 	params := fmt.Sprintf("via=sms&&phone_number=%s&&country_code=%d", number, code)
 	if len(locale) != 0 {
@@ -23,7 +23,7 @@ func StartTwilioVerify(code int, number, locale, secretKey string, anlogger *sys
 	req, err := http.NewRequest("POST", url, strings.NewReader(params))
 
 	if err != nil {
-		anlogger.Errorf(lc, "twillio.go : error while construct the request to verify code [%d] and phone [%s] : %v", code, number, err)
+		anlogger.Errorf(lc, "twillio.go : error while construct the request to verify code [%d] and phone [%s] for userId [%s] : %v", code, number, userId, err)
 		return false, InternalServerError
 	}
 
@@ -32,36 +32,36 @@ func StartTwilioVerify(code int, number, locale, secretKey string, anlogger *sys
 
 	client := &http.Client{}
 
-	anlogger.Debugf(lc, "twillio.go : make POST request by url %s with params %s", url, params)
+	anlogger.Debugf(lc, "twillio.go : make POST request by url %s with params %s for userId [%s]", url, params, userId)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		anlogger.Errorf(lc, "twillio.go error while making request by url %s with params %s : %v", url, params, err)
+		anlogger.Errorf(lc, "twillio.go error while making request by url %s with params %s for userId [%s] : %v", url, params, userId, err)
 		return false, InternalServerError
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		anlogger.Errorf(lc, "twillio.go : error reading response body from Twilio, code [%d] and phone [%s] : %v", code, number, err)
+		anlogger.Errorf(lc, "twillio.go : error reading response body from Twilio, code [%d] and phone [%s] for userId [%s] : %v", code, number, userId, err)
 		return false, InternalServerError
 	}
 
-	anlogger.Debugf(lc, "twillio.go : receive response from Twilio, body=%s, code [%d] and phone [%s]", string(body), code, number)
+	anlogger.Debugf(lc, "twillio.go : receive response from Twilio, body=%s, code [%d] and phone [%s] for userId [%s]", string(body), code, number, userId)
 	if resp.StatusCode != 200 {
-		anlogger.Errorf(lc, "twillio.go : error while sending sms, status %v, body %v",
-			resp.StatusCode, string(body))
+		anlogger.Errorf(lc, "twillio.go : error while sending sms, status %v, body %v for userId [%s]",
+			resp.StatusCode, string(body), userId)
 
 		var errorResp map[string]interface{}
 		err := json.Unmarshal(body, &errorResp)
 		if err != nil {
-			anlogger.Errorf(lc, "twillio.go : error parsing Twilio response, code [%d] and phone [%s] : %v", code, number, err)
+			anlogger.Errorf(lc, "twillio.go : error parsing Twilio response, code [%d] and phone [%s] for userId [%s] : %v", code, number, userId, err)
 			return false, InternalServerError
 		}
 
 		if errorCodeObject, ok := errorResp["error_code"]; ok {
 			if errorCodeStr, ok := errorCodeObject.(string); ok {
-				anlogger.Errorf(lc, "twillio.go : Twilio return error_code=%s, code [%d] and phone [%s]", errorCodeStr, code, number, err)
+				anlogger.Errorf(lc, "twillio.go : Twilio return error_code=%s, code [%d] and phone [%s] for userId [%s]", errorCodeStr, code, number, userId)
 				switch errorCodeStr {
 				case "60033":
 					return false, PhoneNumberClientError
@@ -74,8 +74,10 @@ func StartTwilioVerify(code int, number, locale, secretKey string, anlogger *sys
 		return false, InternalServerError
 	}
 
-	anlogger.Infof(lc, "twillio.go : sms was successfully sent, status %v, body %v, code [%d] and phone [%s]",
+	anlogger.Debugf(lc, "twillio.go : sms was successfully sent, status %v, body %v, code [%d] and phone [%s]",
 		resp.StatusCode, string(body), code, number)
+	anlogger.Infof(lc, "twillio.go : sms was successfully sent, status %v for userId [%s]",
+		resp.StatusCode, userId)
 	return true, ""
 }
 

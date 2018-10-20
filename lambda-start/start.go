@@ -186,7 +186,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		OsVersion:      reqParam.OsVersion,
 	}
 
-	resUserId, resSessionId, resCustomerId, wasCreated, ok, errStr := createUserInfo(userInfo, lc)
+	resUserId, resSessionId, resCustomerId, wasCreated, ok, errStr := createUserInfo(userInfo, isItAndroid, lc)
 	if !ok {
 		anlogger.Errorf(lc, "start.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
@@ -195,13 +195,13 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	resp := apimodel.AuthResp{}
 
 	if wasCreated {
-		anlogger.Debugf(lc, "start.go : new userId was reserved, userId [%s], sessionId [%s] and customerId [%s]",
+		anlogger.Infof(lc, "start.go : new userId was reserved, userId [%s], sessionId [%s] and customerId [%s]",
 			resUserId, resSessionId, resCustomerId)
 
 		resp.SessionId = resSessionId
 		resp.CustomerId = resCustomerId
 	} else {
-		newSessionId, resultUserId, resCustomerId, ok, errStr := updateUserDataWithSessionId(userInfo, lc)
+		newSessionId, resultUserId, resCustomerId, ok, errStr := updateUserDataWithSessionId(userInfo, isItAndroid, lc)
 		if !ok {
 			anlogger.Errorf(lc, "start.go : return %s to client", errStr)
 			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
@@ -212,15 +212,17 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		resp.CustomerId = resCustomerId
 		anlogger.Debugf(lc, "start.go : userId [%s] for such phone [%s] was previously reserved, new sessionId [%s] was generated, customerId [%s]",
 			resUserId, userInfo.Phone, resp.SessionId, resp.CustomerId)
+		anlogger.Infof(lc, "start.go : userId [%s] for such phone was previously reserved, new sessionId [%s] was generated, customerId [%s]",
+			resUserId, resp.SessionId, resp.CustomerId)
 	}
 	//send analytics event
-	event := apimodel.NewUserAcceptTermsEvent(reqParam, sourceIp, resUserId, resCustomerId)
+	event := apimodel.NewUserAcceptTermsEvent(reqParam, sourceIp, resUserId, resCustomerId, isItAndroid, wasCreated)
 	apimodel.SendAnalyticEvent(event, resUserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	//send sms
 	switch userInfo.VerifyProvider {
 	case apimodel.Twilio:
-		ok, errorStr := apimodel.StartTwilioVerify(userInfo.CountryCode, userInfo.PhoneNumber, reqParam.Locale, twilioKey, anlogger, lc)
+		ok, errorStr := apimodel.StartTwilioVerify(userInfo.CountryCode, userInfo.PhoneNumber, reqParam.Locale, twilioKey, userId, anlogger, lc)
 		if !ok {
 			anlogger.Errorf(lc, "start.go : return %s to client", errorStr)
 			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errorStr}, nil
@@ -287,18 +289,28 @@ func generateUserId(phone string, lc *lambdacontext.LambdaContext) (string, bool
 }
 
 //return updated sessionId, userId, customerId is everything ok and error string
-func updateUserDataWithSessionId(info *apimodel.UserInfo, lc *lambdacontext.LambdaContext) (string, string, string, bool, string) {
-	anlogger.Debugf(lc, "start.go : update user data %v", info)
+func updateUserDataWithSessionId(info *apimodel.UserInfo, isItAndroid bool, lc *lambdacontext.LambdaContext) (string, string, string, bool, string) {
+	anlogger.Debugf(lc, "start.go : update user data %v, is it Android %v", info, isItAndroid)
+
+	deviceColumnName := apimodel.AndroidDeviceModelColumnName
+	osColumnName := apimodel.AndroidOsVersionColumnName
+	if !isItAndroid {
+		deviceColumnName = apimodel.IOSDeviceModelColumnName
+		osColumnName = apimodel.IOsVersionColumnName
+	}
 
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
-				"#sessionId":     aws.String(apimodel.SessionIdColumnName),
-				"#time":          aws.String(apimodel.UpdatedTimeColumnName),
-				"#provider":      aws.String(apimodel.VerifyProviderColumnName),
-				"#verifyStatus":  aws.String(apimodel.VerificationStatusColumnName),
-				"#verifyStartAt": aws.String(apimodel.VerificationStartAtColumnName),
-				"#locale":        aws.String(apimodel.LocaleColumnName),
+				"#sessionId":        aws.String(apimodel.SessionIdColumnName),
+				"#time":             aws.String(apimodel.UpdatedTimeColumnName),
+				"#provider":         aws.String(apimodel.VerifyProviderColumnName),
+				"#verifyStatus":     aws.String(apimodel.VerificationStatusColumnName),
+				"#verifyStartAt":    aws.String(apimodel.VerificationStartAtColumnName),
+				"#locale":           aws.String(apimodel.LocaleColumnName),
+				"#currentIsAndroid": aws.String(apimodel.CurrentActiveDeviceIsAndroid),
+				"#device":           aws.String(deviceColumnName),
+				"#os":               aws.String(osColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":sV": {
@@ -319,6 +331,15 @@ func updateUserDataWithSessionId(info *apimodel.UserInfo, lc *lambdacontext.Lamb
 				":localeV": {
 					S: aws.String(info.Locale),
 				},
+				":currentIsAndroidV": {
+					BOOL: aws.Bool(isItAndroid),
+				},
+				":deviceV": {
+					S: aws.String(info.DeviceModel),
+				},
+				":osV": {
+					S: aws.String(info.OsVersion),
+				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
 				apimodel.PhoneColumnName: {
@@ -326,7 +347,7 @@ func updateUserDataWithSessionId(info *apimodel.UserInfo, lc *lambdacontext.Lamb
 				},
 			},
 			TableName:        aws.String(userTableName),
-			UpdateExpression: aws.String("SET #sessionId = :sV, #time = :tV, #provider = :providerV, #verifyStatus = :verifyStatusV, #verifyStartAt = :verifyStartAtV, #locale = :localeV"),
+			UpdateExpression: aws.String("SET #sessionId = :sV, #time = :tV, #provider = :providerV, #verifyStatus = :verifyStatusV, #verifyStartAt = :verifyStartAtV, #locale = :localeV, #currentIsAndroid = :currentIsAndroidV, #device = :deviceV, #os = :osV"),
 			ReturnValues:     aws.String("ALL_NEW"),
 		}
 
@@ -340,7 +361,7 @@ func updateUserDataWithSessionId(info *apimodel.UserInfo, lc *lambdacontext.Lamb
 	resultUserId := *res.Attributes[apimodel.UserIdColumnName].S
 	resultCustomerId := *res.Attributes[apimodel.CustomerIdColumnName].S
 
-	anlogger.Debugf(lc, "start.go : successfully update user data %v", info)
+	anlogger.Debugf(lc, "start.go : successfully update user data %v, is it Android %v", info, isItAndroid)
 
 	return resultSessionId, resultUserId, resultCustomerId, true, ""
 }
@@ -388,8 +409,15 @@ func updateRequestId(phone, requestId, userId string, lc *lambdacontext.LambdaCo
 }
 
 //return userId, sessionId,  was user created, was everything ok and error string
-func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext) (userId, sessionId, customerId string, wasCreated, ok bool, errorStr string) {
-	anlogger.Debugf(lc, "start.go : reserve userId and customerId, for phone [%s], userInfo=%v", userInfo.Phone, userInfo)
+func createUserInfo(userInfo *apimodel.UserInfo, isItAndroid bool, lc *lambdacontext.LambdaContext) (userId, sessionId, customerId string, wasCreated, ok bool, errorStr string) {
+	anlogger.Debugf(lc, "start.go : reserve userId [%s] and customerId [%s], for phone [%s], is it Android [%v], userInfo=%v", userInfo.UserId, userInfo.CustomerId, userInfo.Phone, isItAndroid, userInfo)
+
+	deviceColumnName := apimodel.AndroidDeviceModelColumnName
+	osColumnName := apimodel.AndroidOsVersionColumnName
+	if !isItAndroid {
+		deviceColumnName = apimodel.IOSDeviceModelColumnName
+		osColumnName = apimodel.IOsVersionColumnName
+	}
 
 	input :=
 		&dynamodb.UpdateItemInput{
@@ -397,16 +425,17 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 				"#userId":    aws.String(apimodel.UserIdColumnName),
 				"#sessionId": aws.String(apimodel.SessionIdColumnName),
 
-				"#countryCode":   aws.String(apimodel.CountryCodeColumnName),
-				"#phoneNumber":   aws.String(apimodel.PhoneNumberColumnName),
-				"#time":          aws.String(apimodel.UpdatedTimeColumnName),
-				"#customerId":    aws.String(apimodel.CustomerIdColumnName),
-				"#provider":      aws.String(apimodel.VerifyProviderColumnName),
-				"#verifyStatus":  aws.String(apimodel.VerificationStatusColumnName),
-				"#verifyStartAt": aws.String(apimodel.VerificationStartAtColumnName),
-				"#locale":        aws.String(apimodel.LocaleColumnName),
-				"#device":        aws.String(apimodel.DeviceModelColumnName),
-				"#os":            aws.String(apimodel.OsVersionColumnName),
+				"#countryCode":      aws.String(apimodel.CountryCodeColumnName),
+				"#phoneNumber":      aws.String(apimodel.PhoneNumberColumnName),
+				"#time":             aws.String(apimodel.UpdatedTimeColumnName),
+				"#customerId":       aws.String(apimodel.CustomerIdColumnName),
+				"#provider":         aws.String(apimodel.VerifyProviderColumnName),
+				"#verifyStatus":     aws.String(apimodel.VerificationStatusColumnName),
+				"#verifyStartAt":    aws.String(apimodel.VerificationStartAtColumnName),
+				"#locale":           aws.String(apimodel.LocaleColumnName),
+				"#currentIsAndroid": aws.String(apimodel.CurrentActiveDeviceIsAndroid),
+				"#device":           aws.String(deviceColumnName),
+				"#os":               aws.String(osColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":uV": {
@@ -440,6 +469,9 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 				":localeV": {
 					S: aws.String(userInfo.Locale),
 				},
+				":currentIsAndroidV": {
+					BOOL: aws.Bool(isItAndroid),
+				},
 				":deviceV": {
 					S: aws.String(userInfo.DeviceModel),
 				},
@@ -455,7 +487,7 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", apimodel.PhoneColumnName)),
 
 			TableName:        aws.String(userTableName),
-			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV, #customerId = :cIdV, #provider = :providerV, #verifyStatus = :verifyStatusV, #verifyStartAt = :verifyStartAtV, #locale = :localeV, #device = :deviceV, #os = :osV"),
+			UpdateExpression: aws.String("SET #userId = :uV, #sessionId = :sV, #countryCode = :cV, #phoneNumber = :pnV, #time = :tV, #customerId = :cIdV, #provider = :providerV, #verifyStatus = :verifyStatusV, #verifyStartAt = :verifyStartAtV, #locale = :localeV, #currentIsAndroid = :currentIsAndroidV, #device = :deviceV, #os = :osV"),
 			ReturnValues:     aws.String("ALL_NEW"),
 		}
 
@@ -465,18 +497,18 @@ func createUserInfo(userInfo *apimodel.UserInfo, lc *lambdacontext.LambdaContext
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case dynamodb.ErrCodeConditionalCheckFailedException:
-				anlogger.Debugf(lc, "start.go : userId was already reserved for this phone number, phone [%s]", userInfo.Phone)
+				anlogger.Debugf(lc, "start.go : userId [%s] was already reserved for this phone number, phone [%s]", userInfo.UserId, userInfo.Phone)
 				return "", "", "", false, true, ""
 			}
 		}
-		anlogger.Errorf(lc, "start.go : error while reserve userId and customerId for phone [%s], userInfo=%v : %v", userInfo.Phone, userInfo, err)
+		anlogger.Errorf(lc, "start.go : error while reserve userId [%s] and customerId [%s] for phone [%s], userInfo=%v : %v", userInfo.UserId, userInfo.CustomerId, userInfo.Phone, userInfo, err)
 		return "", "", "", false, false, apimodel.InternalServerError
 	}
 
 	resUserId := *res.Attributes[apimodel.UserIdColumnName].S
 	resSessionId := *res.Attributes[apimodel.SessionIdColumnName].S
 	resCustomerId := *res.Attributes[apimodel.CustomerIdColumnName].S
-	anlogger.Debugf(lc, "start.go : successfully reserve userId [%s] and customerId [%s] for phone [%s]", resUserId, resCustomerId, userInfo.Phone)
+	anlogger.Debugf(lc, "start.go : successfully reserve userId [%s] and customerId [%s] for phone [%s], is it android [%v]", resUserId, resCustomerId, userInfo.Phone, isItAndroid)
 	return resUserId, resSessionId, resCustomerId, true, true, ""
 }
 

@@ -16,15 +16,37 @@ type UserAcceptTermsEvent struct {
 	DateTimePrivacyNotes       int64  `json:"dtPN"`
 	DateTimeLegalAge           int64  `json:"dtLA"`
 	CustomerId                 string `json:"customerId"`
-	DeviceModel                string `json:"deviceModel"`
-	OsVersion                  string `json:"osVersion"`
+	AndroidDeviceModel         string `json:"androidDeviceModel"`
+	AndroidOsVersion           string `json:"androidOsVersion"`
+	iOSDeviceModel             string `json:"iOsDeviceModel"`
+	iOsVersion                 string `json:"iOsVersion"`
+	WasThisUserNew             bool   `json:"wasThisUserNew"`
 }
 
 func (event UserAcceptTermsEvent) String() string {
 	return fmt.Sprintf("%#v", event)
 }
 
-func NewUserAcceptTermsEvent(req *StartReq, sourceIp, userId, customerId string) *UserAcceptTermsEvent {
+func NewUserAcceptTermsEvent(req *StartReq, sourceIp, userId, customerId string, isItAndroid, wasThisUserNew bool) *UserAcceptTermsEvent {
+	if isItAndroid {
+		return &UserAcceptTermsEvent{
+			UserId: userId,
+			Locale: req.Locale,
+			//gdpr?
+			SourceIp:   sourceIp,
+			CustomerId: customerId,
+
+			ClientValidationFail:       req.ClientValidationFail,
+			UnixTime:                   time.Now().Unix(),
+			DateTimeLegalAge:           req.DateTimeLegalAge,
+			DateTimePrivacyNotes:       req.DateTimePrivacyNotes,
+			DateTimeTermsAndConditions: req.DateTimeTermsAndConditions,
+			AndroidDeviceModel:         req.DeviceModel,
+			AndroidOsVersion:           req.OsVersion,
+			WasThisUserNew:             wasThisUserNew,
+			EventType:                  "AUTH_USER_ACCEPT_TERMS",
+		}
+	}
 	return &UserAcceptTermsEvent{
 		UserId: userId,
 		Locale: req.Locale,
@@ -37,10 +59,10 @@ func NewUserAcceptTermsEvent(req *StartReq, sourceIp, userId, customerId string)
 		DateTimeLegalAge:           req.DateTimeLegalAge,
 		DateTimePrivacyNotes:       req.DateTimePrivacyNotes,
 		DateTimeTermsAndConditions: req.DateTimeTermsAndConditions,
-		DeviceModel:                req.DeviceModel,
-		OsVersion:                  req.OsVersion,
-
-		EventType: "AUTH_USER_ACCEPT_TERMS",
+		iOSDeviceModel:             req.DeviceModel,
+		iOsVersion:                 req.OsVersion,
+		WasThisUserNew:             wasThisUserNew,
+		EventType:                  "AUTH_USER_ACCEPT_TERMS",
 	}
 }
 
