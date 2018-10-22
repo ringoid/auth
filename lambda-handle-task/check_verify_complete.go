@@ -52,7 +52,7 @@ func checkVerifyComplete(body []byte, baseCloudWatchNamespace, nexmoMetricName, 
 	}
 	switch status {
 	case "start":
-		anlogger.Errorf(lc, "check_verify_complete.go : verification is still in progress for phone [%s] and provider [%s]", rTask.Phone, provider)
+		anlogger.Warnf(lc, "check_verify_complete.go : verification is still in progress for phone [%s] and provider [%s]", rTask.Phone, provider)
 		apimodel.SendCloudWatchMetric(baseCloudWatchNamespace, name, 1, cwClient, anlogger, lc)
 	case "complete":
 		anlogger.Debugf(lc, "check_verify_complete.go : successfully complete verification in time for phone [%s] and provider [%s]", rTask.Phone, provider)
