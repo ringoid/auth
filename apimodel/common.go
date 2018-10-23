@@ -49,6 +49,8 @@ const (
 
 	UpdatedTimeColumnName    = "updated_at"
 	LastOnlineTimeColumnName = "last_online_time"
+	CurrentAndroidBuildNum   = "current_android_buildnum"
+	CurrentiOSBuildNum       = "current_ios_buildnum"
 
 	SafeDistanceInMeterColumnName = "safe_distance_in_meter"
 	PushMessagesColumnName        = "push_messages"

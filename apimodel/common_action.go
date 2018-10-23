@@ -213,17 +213,28 @@ func IsItWarmUpRequest(body string, anlogger *syslog.Logger, lc *lambdacontext.L
 }
 
 //return ok and error string
-func UpdateLastOnlineTime(userId, userProfileTableName string, awsDbClient *dynamodb.DynamoDB, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "common_action.go : update last online time for userId [%s]", userId)
+func UpdateLastOnlineTimeAndBuildNum(userId, userProfileTableName string, buildNum int, isItAndroid bool,
+	awsDbClient *dynamodb.DynamoDB, anlogger *syslog.Logger, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "common_action.go : update last online time and build num [%v] (is it andoid [%v]) for userId [%s]",
+		buildNum, isItAndroid, userId)
+
+	columnName := CurrentAndroidBuildNum
+	if !isItAndroid {
+		columnName = CurrentiOSBuildNum
+	}
 
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
 				"#onlineTime": aws.String(LastOnlineTimeColumnName),
+				"#buildNum":   aws.String(columnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":onlineTimeV": {
 					N: aws.String(fmt.Sprintf("%v", time.Now().Unix())),
+				},
+				":buildNumV": {
+					N: aws.String(strconv.Itoa(buildNum)),
 				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
@@ -232,16 +243,18 @@ func UpdateLastOnlineTime(userId, userProfileTableName string, awsDbClient *dyna
 				},
 			},
 			TableName:        aws.String(userProfileTableName),
-			UpdateExpression: aws.String("SET #onlineTime = :onlineTimeV"),
+			UpdateExpression: aws.String("SET #onlineTime = :onlineTimeV, #buildNum = :buildNumV"),
 		}
 
 	_, err := awsDbClient.UpdateItem(input)
 	if err != nil {
-		anlogger.Errorf(lc, "common_action.go : error while update last online time for userId [%s] : %v", userId, err)
+		anlogger.Errorf(lc, "common_action.go : error while update last online time and build num [%v] (is it android [%v]) for userId [%s] : %v",
+			userId, buildNum, isItAndroid, err)
 		return false, InternalServerError
 	}
 
-	anlogger.Debugf(lc, "common_action.go : successfully update last online time for userId [%s]", userId)
+	anlogger.Debugf(lc, "common_action.go : successfully update last online time and build num [%v] (is it android [%v]) for userId [%s]",
+		buildNum, isItAndroid, userId)
 
 	return true, ""
 }
@@ -279,7 +292,7 @@ func Login(appVersion int, isItAndroid bool, token, secretWord, userProfileTable
 		return "", false, InvalidAccessTokenClientError
 	}
 
-	ok, errStr = UpdateLastOnlineTime(userId, userProfileTable, awsDbClient, anlogger, lc)
+	ok, errStr = UpdateLastOnlineTimeAndBuildNum(userId, userProfileTable, appVersion, isItAndroid, awsDbClient, anlogger, lc)
 	if !ok {
 		return "", ok, errStr
 	}
