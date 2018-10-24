@@ -85,7 +85,8 @@ func (req InternalGetUserIdReq) String() string {
 
 type InternalGetUserIdResp struct {
 	BaseResponse
-	UserId string `json:"userId"`
+	UserId         string `json:"userId"`
+	IsUserReported bool   `json:"isUserReported"`
 }
 
 func (resp InternalGetUserIdResp) String() string {
