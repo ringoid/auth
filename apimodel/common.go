@@ -94,8 +94,8 @@ func (resp BaseResponse) String() string {
 //map contains mapping between country calling code and verification provider
 var RoutingRuleMap map[int]string
 
-var MinimalAndroidBuildNum = 1
-var MinimaliOSBuildNum = 1
+var MinimalAndroidBuildNum = 66
+var MinimaliOSBuildNum = 66
 
 func init() {
 	RoutingRuleMap = make(map[int]string)
