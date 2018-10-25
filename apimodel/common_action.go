@@ -268,12 +268,12 @@ func Login(appVersion int, isItAndroid bool, token, secretWord, userProfileTable
 	switch isItAndroid {
 	case true:
 		if appVersion < MinimalAndroidBuildNum {
-			anlogger.Warnf(lc, "common_action.go : warning, too old Android version [%d] when min version is [%d]", appVersion, MinimalAndroidBuildNum)
+			anlogger.Infof(lc, "common_action.go : too old Android version [%d] when min version is [%d]", appVersion, MinimalAndroidBuildNum)
 			return "", false, TooOldAppVersionClientError
 		}
 	default:
 		if appVersion < MinimaliOSBuildNum {
-			anlogger.Warnf(lc, "common_action.go : warning, too old iOS version [%d] when min version is [%d]", appVersion, MinimaliOSBuildNum)
+			anlogger.Infof(lc, "common_action.go : too old iOS version [%d] when min version is [%d]", appVersion, MinimaliOSBuildNum)
 			return "", false, TooOldAppVersionClientError
 		}
 	}
