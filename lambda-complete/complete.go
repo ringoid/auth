@@ -153,14 +153,14 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	case true:
 		if appVersion < apimodel.MinimalAndroidBuildNum {
 			errStr := apimodel.TooOldAppVersionClientError
-			anlogger.Errorf(lc, "complete.go : error, too old Android version [%d] when min version is [%d]", appVersion, apimodel.MinimalAndroidBuildNum)
+			anlogger.Warnf(lc, "complete.go : warning, too old Android version [%d] when min version is [%d]", appVersion, apimodel.MinimalAndroidBuildNum)
 			anlogger.Errorf(lc, "complete.go : return %s to client", errStr)
 			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 		}
 	case false:
 		if appVersion < apimodel.MinimaliOSBuildNum {
 			errStr := apimodel.TooOldAppVersionClientError
-			anlogger.Errorf(lc, "complete.go : error, too old iOS version [%d] when min version is [%d]", appVersion, apimodel.MinimaliOSBuildNum)
+			anlogger.Warnf(lc, "complete.go : warning, too old iOS version [%d] when min version is [%d]", appVersion, apimodel.MinimaliOSBuildNum)
 			anlogger.Errorf(lc, "complete.go : return %s to client", errStr)
 			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 		}
