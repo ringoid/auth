@@ -1,4 +1,6 @@
-all: clean stage-deploy
+stage-all: clean stage-deploy
+test-all: clean test-deploy
+prod-all: clean prod-deploy
 
 build:
 	@echo '--- Building start-auth function ---'
@@ -40,12 +42,26 @@ zip_lambda: build
 	@echo '--- Zip internal-handle-task-image function ---'
 	zip internal_handle_task.zip ./internal_handle_task
 
+test-deploy: zip_lambda
+	@echo '--- Build lambda test ---'
+	@echo 'Package template'
+	sam package --template-file auth-template.yaml --s3-bucket ringoid-cloudformation-template --output-template-file auth-template-packaged.yaml
+	@echo 'Deploy test-auth-stack'
+	sam deploy --template-file auth-template-packaged.yaml --s3-bucket ringoid-cloudformation-template --stack-name test-auth-stack --capabilities CAPABILITY_IAM --parameter-overrides Env=test --no-fail-on-empty-changeset
+
 stage-deploy: zip_lambda
 	@echo '--- Build lambda stage ---'
 	@echo 'Package template'
 	sam package --template-file auth-template.yaml --s3-bucket ringoid-cloudformation-template --output-template-file auth-template-packaged.yaml
 	@echo 'Deploy stage-auth-stack'
 	sam deploy --template-file auth-template-packaged.yaml --s3-bucket ringoid-cloudformation-template --stack-name stage-auth-stack --capabilities CAPABILITY_IAM --parameter-overrides Env=stage --no-fail-on-empty-changeset
+
+prod-deploy: zip_lambda
+	@echo '--- Build lambda prod ---'
+	@echo 'Package template'
+	sam package --template-file auth-template.yaml --s3-bucket ringoid-cloudformation-template --output-template-file auth-template-packaged.yaml
+	@echo 'Deploy prod-auth-stack'
+	sam deploy --template-file auth-template-packaged.yaml --s3-bucket ringoid-cloudformation-template --stack-name prod-auth-stack --capabilities CAPABILITY_IAM --parameter-overrides Env=prod --no-fail-on-empty-changeset
 
 clean:
 	@echo '--- Delete old artifacts ---'

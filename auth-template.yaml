@@ -7,9 +7,17 @@ Mappings:
   LogMap:
     PapertrailLog:
       stage: "logs7.papertrailapp.com:23213"
-      prod: "should-be-prod-papertril-endpoint"
+      test: "logs7.papertrailapp.com:16637"
+      prod: "logs7.papertrailapp.com:16747"
 
   UserTableCUMap:
+    test:
+      wcumax: 1
+      wcucrt: 1
+      wcumin: 1
+      rcumax: 1
+      rcucrt: 1
+      rcumin: 1
     stage:
       wcumax: 1
       wcucrt: 1
@@ -26,6 +34,13 @@ Mappings:
       rcumin: should-be-prod-value
 
   UserProfileTableCUMap:
+    test:
+      wcumax: 1
+      wcucrt: 1
+      wcumin: 1
+      rcumax: 1
+      rcucrt: 1
+      rcumin: 1
     stage:
       wcumax: 1
       wcucrt: 1
@@ -42,6 +57,13 @@ Mappings:
       rcumin: should-be-prod-value
 
   UserSettingsTableCUMap:
+    test:
+      wcumax: 1
+      wcucrt: 1
+      wcumin: 1
+      rcumax: 1
+      rcucrt: 1
+      rcumin: 1
     stage:
       wcumax: 1
       wcucrt: 1
@@ -59,32 +81,51 @@ Mappings:
 
   FunctionName:
     WarmUpFunction:
+      test: test-warm-up-auth
       stage: stage-warm-up-auth
       prod: prod-warm-up-auth
     StartAuthFunction:
+      test: test-start-auth
       stage: stage-start-auth
       prod: prod-start-auth
     CompleteAuthFunction:
+      test: test-complete-auth
       stage: stage-complete-auth
       prod: prod-complete-auth
     CreateAuthFunction:
+      test: test-create-auth
       stage: stage-create-auth
       prod: prod-create-auth
     UpdateSettingsAuthFunction:
+      test: test-update-settings-auth
       stage: stage-update-settings-auth
       prod: prod-update-settings-auth
     GetSettingsAuthFunction:
+      test: test-get-settings-auth
       stage: stage-get-settings-auth
       prod: prod-get-settings-auth
     InternalGetUserIdFunction:
+      test: test-internal-validate-token-auth
       stage: stage-internal-validate-token-auth
       prod: prod-internal-validate-token-auth
     LogoutAuthFunction:
+      test: test-logout-auth
       stage: stage-logout-auth
       prod: prod-logout-auth
     InternalHandleAsyncTaskFunction:
+      test: test-internal-handle-async-task-auth
       stage: stage-internal-handle-async-task-auth
       prod: prod-internal-handle-async-task-auth
+
+  SqsName:
+    AsyncTask:
+      test: test-async-task-queue
+      stage: stage-async-task-queue
+      prod: prod-async-task-queue
+    AsyncDeadTask:
+      test: test-async-task-dead-queue
+      stage: stage-async-task-dead-queue
+      prod: prod-async-task-dead-queue
 
 
 Parameters:
@@ -92,6 +133,7 @@ Parameters:
     Type: String
     Default: stage
     AllowedValues:
+      - test
       - stage
       - prod
     Description: Env name
@@ -343,7 +385,7 @@ Resources:
   AsyncTaskSqsQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Join [ "-", [ !Ref Env, auth, async-task-queue] ]
+      QueueName: !FindInMap [SqsName, AsyncTask, !Ref Env]
       VisibilityTimeout: 300
       RedrivePolicy:
         deadLetterTargetArn:
@@ -355,7 +397,7 @@ Resources:
   AsyncTaskDeadMessageSqsQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Join [ "-", [ !Ref Env, auth, async-task-dead-messages-queue] ]
+      QueueName: !FindInMap [SqsName, AsyncDeadTask, !Ref Env]
       VisibilityTimeout: 300
 
   InternalHandleAsyncTaskFunction:
