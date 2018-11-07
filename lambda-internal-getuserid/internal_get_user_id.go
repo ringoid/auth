@@ -115,7 +115,7 @@ func handler(ctx context.Context, request apimodel.InternalGetUserIdReq) (apimod
 
 	resp.UserId = userId
 
-	anlogger.Debugf(lc, "internal_get_user_id.go : successfully check access token and return userId %s in a response", resp.UserId)
+	anlogger.Debugf(lc, "internal_get_user_id.go : successfully check access token and return userId [%s] in a response", resp.UserId)
 
 	return resp, nil
 }
