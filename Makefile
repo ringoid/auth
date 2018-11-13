@@ -21,6 +21,10 @@ build:
 	GOOS=linux go build lambda-warmup/warm_up.go
 	@echo '--- Building lambda-handle-task-image function ---'
 	GOOS=linux go build lambda-handle-task/internal_handle_task.go lambda-handle-task/check_verify_complete.go
+	@echo '--- Building internal-start-auth function ---'
+	GOOS=linux go build lambda-internal-start/internal_start.go
+	@echo '--- Building internal-complete-auth function ---'
+	GOOS=linux go build lambda-internal-complete/internal_complete.go
 
 zip_lambda: build
 	@echo '--- Zip start-auth function ---'
@@ -39,8 +43,12 @@ zip_lambda: build
 	zip logout-auth.zip ./logout
 	@echo '--- Zip warm-up-auth function ---'
 	zip warmup-auth.zip ./warm_up
-	@echo '--- Zip internal-handle-task-image function ---'
+	@echo '--- Zip internal-handle-task-auth function ---'
 	zip internal_handle_task.zip ./internal_handle_task
+	@echo '--- Zip internal-start-auth function ---'
+	zip internal_start.zip ./internal_start
+	@echo '--- Zip internal-complete-auth function ---'
+	zip internal_complete.zip ./internal_complete
 
 test-deploy: zip_lambda
 	@echo '--- Build lambda test ---'
@@ -86,4 +94,8 @@ clean:
 	rm -rf internal_handle_upload
 	rm -rf internal_handle_task
 	rm -rf internal_handle_task.zip
+	rm -rf internal_start.zip
+	rm -rf internal_start
+	rm -rf internal_complete
+	rm -rf internal_complete.zip
 

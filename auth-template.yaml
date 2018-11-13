@@ -116,6 +116,14 @@ Mappings:
       test: test-internal-handle-async-task-auth
       stage: stage-internal-handle-async-task-auth
       prod: prod-internal-handle-async-task-auth
+    InternalStartAuthFunction:
+      test: test-internal-start-auth
+      stage: stage-internal-start-auth
+      prod: prod-internal-start-auth
+    InternalCompleteAuthFunction:
+      test: test-internal-complete-auth
+      stage: stage-internal-complete-auth
+      prod: prod-internal-complete-auth
 
   SqsName:
     AsyncTask:
@@ -255,7 +263,6 @@ Resources:
           - ScheduledWarmUpFunctionRule
           - Arn
 
-
   StartAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -275,6 +282,19 @@ Resources:
             Path: /start_verification
             Method: post
 
+  InternalStartAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !FindInMap [FunctionName, InternalStartAuthFunction, !Ref Env]
+      Handler: internal_start
+      CodeUri: ./internal_start.zip
+      Description: Internal Start auth function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - SecretsManagerReadWrite
+        - AmazonKinesisFirehoseFullAccess
+        - AmazonSQSFullAccess
+
   CompleteAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -293,6 +313,19 @@ Resources:
           Properties:
             Path: /complete_verification
             Method: post
+
+  InternalCompleteAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !FindInMap [FunctionName, InternalCompleteAuthFunction, !Ref Env]
+      Handler: internal_complete
+      CodeUri: ./internal_complete.zip
+      Description: Internal Complete auth function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - SecretsManagerReadWrite
+        - AmazonKinesisFirehoseFullAccess
+        - CloudWatchFullAccess
 
   CreateAuthFunction:
     Type: AWS::Serverless::Function
@@ -885,3 +918,11 @@ Outputs:
     Value: !FindInMap [FunctionName, InternalGetUserIdFunction, !Ref Env]
     Export:
       Name: !Join [ "-", [ !Ref Env, InternalGetUserIdFunctionExport] ]
+  InternalStartAuthFunctionExport:
+    Value: !FindInMap [FunctionName, InternalStartAuthFunction, !Ref Env]
+    Export:
+      Name: !Join [ "-", [ !Ref Env, InternalStartAuthFunctionExport] ]
+  InternalCompleteAuthFunctionExport:
+    Value: !FindInMap [FunctionName, InternalCompleteAuthFunction, !Ref Env]
+    Export:
+      Name: !Join [ "-", [ !Ref Env, InternalCompleteAuthFunctionExport] ]
