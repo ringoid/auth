@@ -25,6 +25,8 @@ build:
 	GOOS=linux go build lambda-internal-start/internal_start.go
 	@echo '--- Building internal-complete-auth function ---'
 	GOOS=linux go build lambda-internal-complete/internal_complete.go
+	@echo '--- Building internal-clean-db-auth function ---'
+	GOOS=linux go build lambda-clean-db/clean.go
 
 zip_lambda: build
 	@echo '--- Zip start-auth function ---'
@@ -49,6 +51,8 @@ zip_lambda: build
 	zip internal_start.zip ./internal_start
 	@echo '--- Zip internal-complete-auth function ---'
 	zip internal_complete.zip ./internal_complete
+	@echo '--- Zip internal-clean-db-auth function ---'
+	zip clean.zip ./clean
 
 test-deploy: zip_lambda
 	@echo '--- Build lambda test ---'
@@ -98,4 +102,6 @@ clean:
 	rm -rf internal_start
 	rm -rf internal_complete
 	rm -rf internal_complete.zip
+	rm -rf clean.zip
+	rm -rf clean
 

@@ -497,7 +497,7 @@ func createUserInfo(userInfo *apimodel.UserInfo, isItAndroid bool, lc *lambdacon
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case dynamodb.ErrCodeConditionalCheckFailedException:
-				anlogger.Debugf(lc, "start.go : userId [%s] was already reserved for this phone number, phone [%s]", userInfo.UserId, userInfo.Phone)
+				anlogger.Debugf(lc, "start.go : userId was already reserved for this phone number, phone [%s]. so cancel userId [%s]", userInfo.Phone, userInfo.UserId)
 				return "", "", "", false, true, ""
 			}
 		}
@@ -521,8 +521,8 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Star
 		return nil, false
 	}
 
-	if req.CountryCallingCode == 0 || req.Phone == "" || req.DateTimeTermsAndConditions == 0 ||
-		req.DateTimePrivacyNotes == 0 || req.DateTimeLegalAge == 0 || req.Locale == "" ||
+	if req.CountryCallingCode <= 0 || req.Phone == "" || req.DateTimeTermsAndConditions <= 0 ||
+		req.DateTimePrivacyNotes <= 0 || req.DateTimeLegalAge <= 0 || req.Locale == "" ||
 		req.DeviceModel == "" || req.OsVersion == "" {
 		anlogger.Errorf(lc, "start.go : one of the required param is nil, req %v", req)
 		return nil, false

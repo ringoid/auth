@@ -124,6 +124,10 @@ Mappings:
       test: test-internal-complete-auth
       stage: stage-internal-complete-auth
       prod: prod-internal-complete-auth
+    InternalCleanDbAuthFunction:
+      test: test-internal-clean-db-auth
+      stage: stage-internal-clean-db-auth
+      prod: prod-internal-clean-db-auth
 
   SqsName:
     AsyncTask:
@@ -226,6 +230,17 @@ Resources:
                   - "cloudwatch:SetAlarmState"
                   - "cloudwatch:DeleteAlarms"
                 Resource: "*"
+
+  InternalCleanDbAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !FindInMap [FunctionName, InternalCleanDbAuthFunction, !Ref Env]
+      Handler: clean
+      CodeUri: ./clean.zip
+      Description: Clean DB auth function
+      Policies:
+        - AWSLambdaFullAccess
+        - AmazonDynamoDBFullAccess
 
   WarmUpFunction:
     Type: AWS::Serverless::Function
@@ -926,3 +941,7 @@ Outputs:
     Value: !FindInMap [FunctionName, InternalCompleteAuthFunction, !Ref Env]
     Export:
       Name: !Join [ "-", [ !Ref Env, InternalCompleteAuthFunctionExport] ]
+  InternalCleanDbAuthFunctionExport:
+    Value: !FindInMap [FunctionName, InternalCleanDbAuthFunction, !Ref Env]
+    Export:
+      Name: !Join [ "-", [ !Ref Env, InternalCleanDbAuthFunctionExport] ]

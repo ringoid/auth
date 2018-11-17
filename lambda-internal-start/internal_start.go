@@ -45,6 +45,13 @@ func init() {
 	}
 	fmt.Printf("lambda-initialization : internal_start.go : start with ENV = [%s]\n", env)
 
+	//!!!START : VERY IMPORTANT CODE. NEVER DELETE OR MODIFY!!!
+	//it's allowed in stage, coz sometimes we need to create users manually
+	if env != "stage" && env != "test" {
+		panic("use clean DB in not safe env")
+	}
+	//!!!END : VERY IMPORTANT CODE. NEVER DELETE OR MODIFY!!!
+
 	papertrailAddress, ok = os.LookupEnv("PAPERTRAIL_LOG_ADDRESS")
 	if !ok {
 		fmt.Printf("lambda-initialization : internal_start.go : env can not be empty PAPERTRAIL_LOG_ADDRESS\n")
