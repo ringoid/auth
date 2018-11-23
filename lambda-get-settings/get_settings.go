@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	basicLambda "github.com/aws/aws-lambda-go/lambda"
-	"../sys_log"
+	"github.com/ringoid/commons"
 	"../apimodel"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/aws"
@@ -18,7 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/kinesis"
 )
 
-var anlogger *syslog.Logger
+var anlogger *commons.Logger
 var awsDbClient *dynamodb.DynamoDB
 var userProfileTable string
 var userSettingsTable string
@@ -49,7 +49,7 @@ func init() {
 	}
 	fmt.Printf("lambda-initialization : get_settings.go.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
-	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "get-settings-auth"))
+	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "get-settings-auth"))
 	if err != nil {
 		fmt.Errorf("lambda-initialization : get_settings.go.go : error during startup : %v\n", err)
 		os.Exit(1)
@@ -71,14 +71,14 @@ func init() {
 	anlogger.Debugf(nil, "lambda-initialization : get_settings.go.go : start with USER_SETTINGS_TABLE = [%s]", userSettingsTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
-		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
+		WithRegion(commons.Region).WithMaxRetries(commons.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
 		anlogger.Fatalf(nil, "lambda-initialization : get_settings.go.go : error during initialization : %v", err)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : get_settings.go.go : aws session was successfully initialized")
 
-	secretWord = apimodel.GetSecret(fmt.Sprintf(apimodel.SecretWordKeyBase, env), apimodel.SecretWordKeyName, awsSession, anlogger, nil)
+	secretWord = commons.GetSecret(fmt.Sprintf(commons.SecretWordKeyBase, env), commons.SecretWordKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "lambda-initialization : get_settings.go.go : dynamodb client was successfully initialized")
@@ -109,11 +109,11 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	anlogger.Debugf(lc, "get_settings.go : start handle request %v", request)
 
-	if apimodel.IsItWarmUpRequest(request.Body, anlogger, lc) {
+	if commons.IsItWarmUpRequest(request.Body, anlogger, lc) {
 		return events.APIGatewayProxyResponse{}, nil
 	}
 
-	appVersion, isItAndroid, ok, errStr := apimodel.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
+	appVersion, isItAndroid, ok, errStr := commons.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "get_settings.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
@@ -121,7 +121,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	accessToken := request.QueryStringParameters["accessToken"]
 
-	userId, ok, errStr := apimodel.Login(appVersion, isItAndroid, accessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
+	userId, ok, errStr := commons.Login(appVersion, isItAndroid, accessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "get_settings.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
@@ -143,7 +143,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	body, err := json.Marshal(resp)
 	if err != nil {
 		anlogger.Errorf(lc, "get_settings.go : error while marshaling resp object for userId [%s], resp=%v : %v", userId, resp, err)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: commons.InternalServerError}, nil
 	}
 	anlogger.Debugf(lc, "get_settings.go : return body=%s to the client, userId [%s]", string(body), userId)
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
@@ -154,7 +154,7 @@ func getUserSettings(userId string, lc *lambdacontext.LambdaContext) (*apimodel.
 	anlogger.Debugf(lc, "get_settings.go : get user settings for userId [%s]", userId)
 	input := &dynamodb.GetItemInput{
 		Key: map[string]*dynamodb.AttributeValue{
-			apimodel.UserIdColumnName: {
+			commons.UserIdColumnName: {
 				S: aws.String(userId),
 			},
 		},
@@ -165,26 +165,26 @@ func getUserSettings(userId string, lc *lambdacontext.LambdaContext) (*apimodel.
 	result, err := awsDbClient.GetItem(input)
 	if err != nil {
 		anlogger.Errorf(lc, "get_settings.go : error get user settings for userId [%s] : %v", userId, err)
-		return nil, false, apimodel.InternalServerError
+		return nil, false, commons.InternalServerError
 	}
 
 	if len(result.Item) == 0 {
 		anlogger.Errorf(lc, "get_settings.go : empty settings for userId [%s]", userId)
-		return nil, false, apimodel.InternalServerError
+		return nil, false, commons.InternalServerError
 	}
 
-	safeD, err := strconv.Atoi(*result.Item[apimodel.SafeDistanceInMeterColumnName].N)
+	safeD, err := strconv.Atoi(*result.Item[commons.SafeDistanceInMeterColumnName].N)
 	if err != nil {
 		anlogger.Errorf(lc, "get_settings.go : error while parsing db response for userId [%s], resp=%v : %v", userId, result.Item, err)
-		return nil, false, apimodel.InternalServerError
+		return nil, false, commons.InternalServerError
 	}
 
 	userSettings := &apimodel.UserSettings{
-		UserId:              *result.Item[apimodel.UserIdColumnName].S,
+		UserId:              *result.Item[commons.UserIdColumnName].S,
 		SafeDistanceInMeter: safeD,
-		PushMessages:        *result.Item[apimodel.PushMessagesColumnName].BOOL,
-		PushMatches:         *result.Item[apimodel.PushMatchesColumnName].BOOL,
-		PushLikes:           *result.Item[apimodel.PushLikesColumnName].S,
+		PushMessages:        *result.Item[commons.PushMessagesColumnName].BOOL,
+		PushMatches:         *result.Item[commons.PushMatchesColumnName].BOOL,
+		PushLikes:           *result.Item[commons.PushLikesColumnName].S,
 	}
 	anlogger.Debugf(lc, "get_settings.go : successfully return user setting for userId [%s], setting=%v", userId, userSettings)
 	return userSettings, true, ""

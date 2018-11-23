@@ -1,9 +1,9 @@
 package main
 
 import (
+	"github.com/ringoid/commons"
 	"context"
 	basicLambda "github.com/aws/aws-lambda-go/lambda"
-	"../sys_log"
 	"../apimodel"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/aws"
@@ -18,9 +18,13 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/service/kinesis"
+	"crypto/sha1"
+	"github.com/satori/go.uuid"
+	"github.com/dgrijalva/jwt-go"
+	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
 
-var anlogger *syslog.Logger
+var anlogger *commons.Logger
 var awsDbClient *dynamodb.DynamoDB
 var userProfileTable string
 var userSettingsTable string
@@ -29,6 +33,10 @@ var deliveryStreamName string
 var secretWord string
 var commonStreamName string
 var awsKinesisClient *kinesis.Kinesis
+
+var baseCloudWatchNamespace string
+var newUserWasCreatedMetricName string
+var awsCWClient *cloudwatch.CloudWatch
 
 func init() {
 	var env string
@@ -51,7 +59,7 @@ func init() {
 	}
 	fmt.Printf("lambda-initialization : create.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
-	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "create-auth"))
+	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "create-auth"))
 	if err != nil {
 		fmt.Errorf("lambda-initialization : create.go : error during startup : %v\n", err)
 		os.Exit(1)
@@ -72,15 +80,27 @@ func init() {
 	}
 	anlogger.Debugf(nil, "lambda-initialization : create.go : start with USER_SETTINGS_TABLE = [%s]", userSettingsTable)
 
+	baseCloudWatchNamespace, ok = os.LookupEnv("BASE_CLOUD_WATCH_NAMESPACE")
+	if !ok {
+		anlogger.Fatalf(nil, "lambda-initialization : create.go : env can not be empty BASE_CLOUD_WATCH_NAMESPACE")
+	}
+	anlogger.Debugf(nil, "lambda-initialization : create.go : start with BASE_CLOUD_WATCH_NAMESPACE = [%s]", baseCloudWatchNamespace)
+
+	newUserWasCreatedMetricName, ok = os.LookupEnv("CLOUD_WATCH_NEW_USER_WAS_CREATED")
+	if !ok {
+		anlogger.Fatalf(nil, "lambda-initialization : create.go : env can not be empty CLOUD_WATCH_NEW_USER_WAS_CREATED")
+	}
+	anlogger.Debugf(nil, "lambda-initialization : create.go : start with CLOUD_WATCH_NEW_USER_WAS_CREATED = [%s]", newUserWasCreatedMetricName)
+
 	awsSession, err = session.NewSession(aws.NewConfig().
-		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
+		WithRegion(commons.Region).WithMaxRetries(commons.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
 		anlogger.Fatalf(nil, "lambda-initialization : create.go : error during initialization : %v", err)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : create.go : aws session was successfully initialized")
 
-	secretWord = apimodel.GetSecret(fmt.Sprintf(apimodel.SecretWordKeyBase, env), apimodel.SecretWordKeyName, awsSession, anlogger, nil)
+	secretWord = commons.GetSecret(fmt.Sprintf(commons.SecretWordKeyBase, env), commons.SecretWordKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "lambda-initialization : create.go : dynamodb client was successfully initialized")
@@ -104,6 +124,9 @@ func init() {
 
 	awsKinesisClient = kinesis.New(awsSession)
 	anlogger.Debugf(nil, "lambda-initialization : create.go : kinesis client was successfully initialized")
+
+	awsCWClient = cloudwatch.New(awsSession)
+	anlogger.Debugf(nil, "lambda-initialization : create.go : cloudwatch client was successfully initialized")
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -111,14 +134,30 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	anlogger.Debugf(lc, "create.go : start handle request %v", request)
 
-	if apimodel.IsItWarmUpRequest(request.Body, anlogger, lc) {
+	if commons.IsItWarmUpRequest(request.Body, anlogger, lc) {
 		return events.APIGatewayProxyResponse{}, nil
 	}
 
-	appVersion, isItAndroid, ok, errStr := apimodel.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
+	appVersion, isItAndroid, ok, errStr := commons.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+	}
+
+	switch isItAndroid {
+	case true:
+		if appVersion < commons.MinimalAndroidBuildNum {
+			errStr = commons.TooOldAppVersionClientError
+			anlogger.Errorf(lc, "create.go : return %s to client", errStr)
+			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		}
+	default:
+		if appVersion < commons.MinimaliOSBuildNum {
+			errStr = commons.TooOldAppVersionClientError
+			anlogger.Errorf(lc, "create.go : return %s to client", errStr)
+			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+
+		}
 	}
 
 	reqParam, ok, errStr := parseParams(request.Body, lc)
@@ -127,15 +166,32 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	userId, ok, errStr := apimodel.Login(appVersion, isItAndroid, reqParam.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
+	sourceIp := request.RequestContext.Identity.SourceIP
+	userId, ok, errStr := generateUserId(sourceIp, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	ok, errStr = createUserProfileDynamo(userId, reqParam, lc)
+	sessionId, err := uuid.NewV4()
+	if err != nil {
+		strErr := commons.InternalServerError
+		anlogger.Errorf(lc, "create.go : error while generate sessionId for userId [%s] : %v", userId, err)
+		anlogger.Errorf(lc, "create.go : return %s to client", strErr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: strErr}, nil
+	}
+
+	customerId, err := uuid.NewV4()
+	if err != nil {
+		strErr := commons.InternalServerError
+		anlogger.Errorf(lc, "create.go : error while generate customerId : %v", err)
+		anlogger.Errorf(lc, "create.go : return %s to client", strErr)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: strErr}, nil
+	}
+
+	ok, errStr = createUserProfile(userId, sessionId.String(), customerId.String(), appVersion, isItAndroid, reqParam, lc)
 	if !ok {
-		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
+		anlogger.Errorf(lc, "commons.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
@@ -146,33 +202,61 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	event := apimodel.NewUserProfileCreatedEvent(userId, reqParam)
-	apimodel.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+	//send analytics events
+	eventAcceptTerms := commons.NewUserAcceptTermsEvent(userId, customerId.String(), reqParam.Locale, sourceIp,
+		reqParam.DeviceModel, reqParam.OsVersion,
+		reqParam.DateTimeLegalAge, reqParam.DateTimePrivacyNotes, reqParam.DateTimeTermsAndConditions,
+		isItAndroid)
+	commons.SendAnalyticEvent(eventAcceptTerms, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
-	settingsEvent := apimodel.NewUserSettingsUpdatedEvent(userSettings)
-	apimodel.SendAnalyticEvent(settingsEvent, userSettings.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+	eventNewUser := commons.NewUserProfileCreatedEvent(userId, reqParam.Sex, reqParam.YearOfBirth)
+	commons.SendAnalyticEvent(eventNewUser, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
+	settingsEvent := commons.NewUserSettingsUpdatedEvent(userId, userSettings.SafeDistanceInMeter,
+		userSettings.PushMessages, userSettings.PushMatches, userSettings.PushLikes)
+	commons.SendAnalyticEvent(settingsEvent, userSettings.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+
+	//send common events
 	partitionKey := userId
-	ok, errStr = apimodel.SendCommonEvent(event, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
+	ok, errStr = commons.SendCommonEvent(eventNewUser, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	ok, errStr = apimodel.SendCommonEvent(settingsEvent, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
+	ok, errStr = commons.SendCommonEvent(settingsEvent, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	resp := apimodel.BaseResponse{}
+	//send cloudwatch metric
+	commons.SendCloudWatchMetric(baseCloudWatchNamespace, newUserWasCreatedMetricName, 1, awsCWClient, anlogger, lc)
+
+	//create access token
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		commons.AccessTokenUserIdClaim:       userId,
+		commons.AccessTokenSessionTokenClaim: sessionId.String(),
+	})
+
+	tokenToString, err := accessToken.SignedString([]byte(secretWord))
+	if err != nil {
+		errStr = commons.InternalServerError
+		anlogger.Errorf(lc, "create.go : error sign the token for userId [%s], return %s to the client : %v", errStr, err)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+	}
+
+	resp := apimodel.CreateResp{
+		AccessToken: tokenToString,
+	}
+
 	body, err := json.Marshal(resp)
 	if err != nil {
 		anlogger.Errorf(lc, "create.go : error while marshaling resp object for userId [%s] : %v", userId, err)
-		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, apimodel.InternalServerError)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
+		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, commons.InternalServerError)
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: commons.InternalServerError}, nil
 	}
-	anlogger.Debugf(lc, "create.go : return successful resp [%s] for userId [%s]", string(body), userId)
+	anlogger.Infof(lc, "create.go : return successful resp [%s] for userId [%s]", string(body), userId)
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
 }
 
@@ -182,69 +266,142 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Crea
 	err := json.Unmarshal([]byte(params), &req)
 	if err != nil {
 		anlogger.Errorf(lc, "create.go : error marshaling required params from the string [%s] : %v", params, err)
-		return nil, false, apimodel.InternalServerError
+		return nil, false, commons.InternalServerError
 	}
 
 	if req.YearOfBirth < time.Now().UTC().Year()-150 || req.YearOfBirth > time.Now().UTC().Year()-18 {
 		anlogger.Errorf(lc, "create.go : wrong year of birth [%d] request param, req %v", req.YearOfBirth, req)
-		return nil, false, apimodel.WrongYearOfBirthClientError
+		return nil, false, commons.WrongYearOfBirthClientError
 	}
 
 	if req.Sex == "" || (req.Sex != "male" && req.Sex != "female") {
 		anlogger.Errorf(lc, "create.go : wrong sex [%s] request param, req %v", req.Sex, req)
-		return nil, false, apimodel.WrongSexClientError
+		return nil, false, commons.WrongSexClientError
 	}
+
+	if req.DateTimeTermsAndConditions <= 0 ||
+		req.DateTimePrivacyNotes <= 0 || req.DateTimeLegalAge <= 0 || req.Locale == "" ||
+		req.DeviceModel == "" || req.OsVersion == "" {
+		anlogger.Errorf(lc, "create.go : one of the required param is nil, req %v", req)
+		return nil, false, commons.WrongRequestParamsClientError
+	}
+
 	anlogger.Debugf(lc, "create.go : successfully parse request string [%s] to %v", params, req)
 	return &req, true, ""
 }
 
-//return ok and error string
-func createUserProfileDynamo(userId string, req *apimodel.CreateReq, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "create.go : create user profile for userId [%s] and req %v", userId, req)
-	input :=
-		&dynamodb.UpdateItemInput{
-			ExpressionAttributeNames: map[string]*string{
-				"#sex":     aws.String(apimodel.SexColumnName),
-				"#year":    aws.String(apimodel.YearOfBirthColumnName),
-				"#created": aws.String(apimodel.ProfileCreatedAt),
-			},
-			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":sV": {
-					S: aws.String(req.Sex),
-				},
-				":yV": {
-					N: aws.String(strconv.Itoa(req.YearOfBirth)),
-				},
-				":cV": {
-					S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
-				},
-			},
-			Key: map[string]*dynamodb.AttributeValue{
-				apimodel.UserIdColumnName: {
-					S: aws.String(userId),
-				},
-			},
-			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", apimodel.SexColumnName)),
+//ok (only if such userId doesn't exist), errorString if not ok
+func createUserProfile(userId, sessionToken, customerId string, buildNum int, isItAndroid bool, req *apimodel.CreateReq, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "create.go : create user userId [%s], sessionToken [%s], customerId [%s], buildNum [%d], isItAndroid [%v] for request [%s]",
+		userId, sessionToken, customerId, buildNum, isItAndroid, req)
 
-			TableName:        aws.String(userProfileTable),
-			UpdateExpression: aws.String("SET #sex = :sV, #year = :yV, #created = :cV"),
-		}
-
-	_, err := awsDbClient.UpdateItem(input)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case dynamodb.ErrCodeConditionalCheckFailedException:
-				anlogger.Warnf(lc, "start.go : warning, profile for userId [%s] already exist", userId)
-				return true, ""
-			}
-		}
-		anlogger.Errorf(lc, "start.go : error while creating profile for userId [%s] : %v", userId, err)
-		return false, apimodel.InternalServerError
+	deviceColumnName := commons.AndroidDeviceModelColumnName
+	osColumnName := commons.AndroidOsVersionColumnName
+	buildNumColumnName := commons.CurrentAndroidBuildNum
+	if !isItAndroid {
+		buildNumColumnName = commons.CurrentiOSBuildNum
+		deviceColumnName = commons.IOSDeviceModelColumnName
+		osColumnName = commons.IOsVersionColumnName
 	}
 
-	anlogger.Debugf(lc, "create.go : successfully create user profile for userId [%s] and req %v", userId, req)
+	input := &dynamodb.UpdateItemInput{
+		ExpressionAttributeNames: map[string]*string{
+			"#token":            aws.String(commons.SessionTokenColumnName),
+			"#updatedAt":        aws.String(commons.TokenUpdatedTimeColumnName),
+			"#locale":           aws.String(commons.LocaleColumnName),
+			"#sex":              aws.String(commons.SexColumnName),
+			"#year":             aws.String(commons.YearOfBirthColumnName),
+			"#created":          aws.String(commons.ProfileCreatedAt),
+			"#onlineTime":       aws.String(commons.LastOnlineTimeColumnName),
+			"#customerId":       aws.String(commons.CustomerIdColumnName),
+			"#currentIsAndroid": aws.String(commons.CurrentActiveDeviceIsAndroid),
+			"#buildNum":         aws.String(buildNumColumnName),
+			"#device":           aws.String(deviceColumnName),
+			"#os":               aws.String(osColumnName),
+		},
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":tV": {
+				S: aws.String(sessionToken),
+			},
+			":uV": {
+				S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
+			},
+			":localeV": {
+				S: aws.String(req.Locale),
+			},
+			":sV": {
+				S: aws.String(req.Sex),
+			},
+			":yV": {
+				N: aws.String(strconv.Itoa(req.YearOfBirth)),
+			},
+			":cV": {
+				S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
+			},
+			":onlineTimeV": {
+				N: aws.String(fmt.Sprintf("%v", time.Now().Unix())),
+			},
+			":buildNumV": {
+				N: aws.String(strconv.Itoa(buildNum)),
+			},
+			":cIdV": {
+				S: aws.String(customerId),
+			},
+			":currentIsAndroidV": {
+				BOOL: aws.Bool(isItAndroid),
+			},
+			":deviceV": {
+				S: aws.String(req.DeviceModel),
+			},
+			":osV": {
+				S: aws.String(req.OsVersion),
+			},
+		},
+		Key: map[string]*dynamodb.AttributeValue{
+			commons.UserIdColumnName: {
+				S: aws.String(userId),
+			},
+		},
+		ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", commons.UserIdColumnName)),
+		TableName:           aws.String(userProfileTable),
+		UpdateExpression:    aws.String("SET #token = :tV, #updatedAt = :uV, #locale = :localeV, #sex = :sV, #year = :yV, #created = :cV, #onlineTime = :onlineTimeV, #buildNum = :buildNumV, #customerId = :cIdV, #currentIsAndroid = :currentIsAndroidV, #device = :deviceV, #os = :osV"),
+	}
+
+	_, err := awsDbClient.UpdateItem(input)
+
+	if err != nil {
+		anlogger.Errorf(lc, "create.go : error create user for userId [%s] : %v", userId, err)
+		return false, commons.InternalServerError
+	}
+
+	anlogger.Infof(lc, "create.go : successfully create user userId [%s], sessionToken [%s], customerId [%s], buildNum [%d], isItAndroid [%v] for request [%s]",
+		userId, sessionToken, customerId, buildNum, isItAndroid, req)
+
 	return true, ""
+}
+
+//return generated userId, was everything ok and error string
+func generateUserId(base string, lc *lambdacontext.LambdaContext) (string, bool, string) {
+	anlogger.Debugf(lc, "create.go : generate userId for base string [%s]", base)
+	saltForUserId, err := uuid.NewV4()
+	if err != nil {
+		anlogger.Errorf(lc, "create.go : error while generate salt for userId, base string [%s] : %v", base, err)
+		return "", false, commons.InternalServerError
+	}
+	sha := sha1.New()
+	_, err = sha.Write([]byte(base))
+	if err != nil {
+		anlogger.Errorf(lc, "create.go : error while write base string to sha algo, base string [%s] : %v", base, err)
+		return "", false, commons.InternalServerError
+	}
+	_, err = sha.Write([]byte(saltForUserId.String()))
+	if err != nil {
+		anlogger.Errorf(lc, "create.go : error while write salt to sha algo, base string [%s] : %v", base, err)
+		return "", false, commons.InternalServerError
+	}
+	resultUserId := fmt.Sprintf("%x", sha.Sum(nil))
+	anlogger.Debugf(lc, "create.go : successfully generate userId [%s] for base string [%s]", resultUserId, base)
+	return resultUserId, true, ""
 }
 
 //return ok and error string
@@ -253,10 +410,10 @@ func createUserSettingsIntoDynamo(settings *apimodel.UserSettings, lc *lambdacon
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
-				"#safeDistanceInMeter": aws.String(apimodel.SafeDistanceInMeterColumnName),
-				"#pushMessages":        aws.String(apimodel.PushMessagesColumnName),
-				"#pushMatches":         aws.String(apimodel.PushMatchesColumnName),
-				"#pushLikes":           aws.String(apimodel.PushLikesColumnName),
+				"#safeDistanceInMeter": aws.String(commons.SafeDistanceInMeterColumnName),
+				"#pushMessages":        aws.String(commons.PushMessagesColumnName),
+				"#pushMatches":         aws.String(commons.PushMatchesColumnName),
+				"#pushLikes":           aws.String(commons.PushLikesColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":safeDistanceInMeterV": {
@@ -273,11 +430,11 @@ func createUserSettingsIntoDynamo(settings *apimodel.UserSettings, lc *lambdacon
 				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
-				apimodel.UserIdColumnName: {
+				commons.UserIdColumnName: {
 					S: aws.String(settings.UserId),
 				},
 			},
-			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", apimodel.UserIdColumnName)),
+			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", commons.UserIdColumnName)),
 
 			TableName:        aws.String(userSettingsTable),
 			UpdateExpression: aws.String("SET #safeDistanceInMeter = :safeDistanceInMeterV, #pushMessages = :pushMessagesV, #pushMatches = :pushMatchesV, #pushLikes = :pushLikesV"),
@@ -293,7 +450,7 @@ func createUserSettingsIntoDynamo(settings *apimodel.UserSettings, lc *lambdacon
 			}
 		}
 		anlogger.Errorf(lc, "start.go : error while creating default settings for userId [%s], settings=%v : %v", settings.UserId, settings, err)
-		return false, apimodel.InternalServerError
+		return false, commons.InternalServerError
 	}
 
 	anlogger.Debugf(lc, "create.go : successfully create user default settings for userId [%s], settings=%v", settings.UserId, settings)

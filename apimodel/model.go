@@ -2,26 +2,6 @@ package apimodel
 
 import "fmt"
 
-type UserInfo struct {
-	UserId    string
-	SessionId string
-	//full phone with country code included
-	Phone               string
-	CountryCode         int
-	PhoneNumber         string
-	CustomerId          string
-	VerifyProvider      string
-	VerifyRequestId     string
-	VerificationStartAt int64
-	Locale              string
-	DeviceModel         string
-	OsVersion           string
-}
-
-func (model UserInfo) String() string {
-	return fmt.Sprintf("%#v", model)
-}
-
 type UserSettings struct {
 	UserId              string
 	SafeDistanceInMeter int    // 0 (default for men) || 10 (default for women)

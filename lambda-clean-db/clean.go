@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	basicLambda "github.com/aws/aws-lambda-go/lambda"
-	"../sys_log"
-	"../apimodel"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/aws"
 	"os"
@@ -12,11 +10,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"errors"
+	"github.com/ringoid/commons"
 )
 
-var anlogger *syslog.Logger
+var anlogger *commons.Logger
 var awsDbClient *dynamodb.DynamoDB
-var userTableName string
 var userProfileTable string
 var userSettingsTable string
 
@@ -47,19 +45,12 @@ func init() {
 	}
 	fmt.Printf("lambda-initialization : clean.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
-	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "internal-clean-db-auth"))
+	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "internal-clean-db-auth"))
 	if err != nil {
 		fmt.Errorf("lambda-initialization : clean.go : error during startup : %v\n", err)
 		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : clean.go : logger was successfully initialized")
-
-	userTableName, ok = os.LookupEnv("USER_TABLE")
-	if !ok {
-		fmt.Printf("lambda-initialization : clean.go : env can not be empty USER_TABLE")
-		os.Exit(1)
-	}
-	anlogger.Debugf(nil, "lambda-initialization : clean.go : start with USER_TABLE = [%s]", userTableName)
 
 	userProfileTable, ok = os.LookupEnv("USER_PROFILE_TABLE")
 	if !ok {
@@ -76,7 +67,7 @@ func init() {
 	anlogger.Debugf(nil, "lambda-initialization : clean.go : start with USER_SETTINGS_TABLE = [%s]", userSettingsTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
-		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
+		WithRegion(commons.Region).WithMaxRetries(commons.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
 		anlogger.Fatalf(nil, "lambda-initialization : clean.go : error during initialization : %v", err)
@@ -89,16 +80,11 @@ func init() {
 
 func handler(ctx context.Context) error {
 	lc, _ := lambdacontext.FromContext(ctx)
-	err := eraseTable(userProfileTable, apimodel.UserIdColumnName, lc)
+	err := eraseTable(userProfileTable, commons.UserIdColumnName, lc)
 	if err != nil {
 		return err
 	}
-	err = eraseTable(userTableName, apimodel.PhoneColumnName, lc)
-	if err != nil {
-		return err
-	}
-	return nil
-	err = eraseTable(userSettingsTable, apimodel.PhoneColumnName, lc)
+	err = eraseTable(userSettingsTable, commons.PhoneColumnName, lc)
 	if err != nil {
 		return err
 	}

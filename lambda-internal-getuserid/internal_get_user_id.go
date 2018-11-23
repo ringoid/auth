@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	basicLambda "github.com/aws/aws-lambda-go/lambda"
-	"../sys_log"
-	"../apimodel"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/aws"
 	"os"
@@ -13,9 +11,10 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"strings"
+	"github.com/ringoid/commons"
 )
 
-var anlogger *syslog.Logger
+var anlogger *commons.Logger
 var awsDbClient *dynamodb.DynamoDB
 var userProfileTable string
 var secretWord string
@@ -43,7 +42,7 @@ func init() {
 	}
 	fmt.Printf("lambda-initialization : internal_get_user_id.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
-	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "internal-get-user-id-auth"))
+	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "internal-get-user-id-auth"))
 	if err != nil {
 		fmt.Errorf("lambda-initialization :  internal_get_user_id.go : error during startup : %v\n", err)
 		os.Exit(1)
@@ -58,14 +57,14 @@ func init() {
 	anlogger.Debugf(nil, "lambda-initialization : internal_get_user_id.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
-		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
+		WithRegion(commons.Region).WithMaxRetries(commons.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
 		anlogger.Fatalf(nil, "lambda-initialization : internal_get_user_id.go : error during initialization : %v", err)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : internal_get_user_id.go : aws session was successfully initialized")
 
-	secretWord = apimodel.GetSecret(fmt.Sprintf(apimodel.SecretWordKeyBase, env), apimodel.SecretWordKeyName, awsSession, anlogger, nil)
+	secretWord = commons.GetSecret(fmt.Sprintf(commons.SecretWordKeyBase, env), commons.SecretWordKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "lambda-initialization : internal_get_user_id.go : dynamodb client was successfully initialized")
@@ -81,18 +80,18 @@ func init() {
 	anlogger.Debugf(nil, "lambda-initialization : internal_get_user_id.go : kinesis client was successfully initialized")
 }
 
-func handler(ctx context.Context, request apimodel.InternalGetUserIdReq) (apimodel.InternalGetUserIdResp, error) {
+func handler(ctx context.Context, request commons.InternalGetUserIdReq) (commons.InternalGetUserIdResp, error) {
 	lc, _ := lambdacontext.FromContext(ctx)
 
 	anlogger.Debugf(lc, "internal_get_user_id.go : start handle request %v", request)
 
 	if request.WarmUpRequest {
-		return apimodel.InternalGetUserIdResp{}, nil
+		return commons.InternalGetUserIdResp{}, nil
 	}
 
-	resp := apimodel.InternalGetUserIdResp{}
+	resp := commons.InternalGetUserIdResp{}
 
-	userId, ok, errStr := apimodel.Login(request.BuildNum, request.IsItAndroid, request.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
+	userId, ok, errStr := commons.Login(request.BuildNum, request.IsItAndroid, request.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", errStr)
 

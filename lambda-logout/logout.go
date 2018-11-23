@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	basicLambda "github.com/aws/aws-lambda-go/lambda"
-	"../sys_log"
 	"../apimodel"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/aws"
@@ -17,12 +16,12 @@ import (
 	"time"
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/service/kinesis"
+	"github.com/ringoid/commons"
 )
 
-var anlogger *syslog.Logger
+var anlogger *commons.Logger
 var secretWord string
 var awsDbClient *dynamodb.DynamoDB
-var userTableName string
 var userProfileTable string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
@@ -50,18 +49,12 @@ func init() {
 	}
 	fmt.Printf("lambda-initialization : logout.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
-	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "logout-auth"))
+	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "logout-auth"))
 	if err != nil {
 		fmt.Errorf("lambda-initialization : logout.go : error during startup : %v\n", err)
 		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : logout.go : logger was successfully initialized")
-
-	userTableName, ok = os.LookupEnv("USER_TABLE")
-	if !ok {
-		anlogger.Fatalf(nil, "lambda-initialization : logout.go : env can not be empty USER_TABLE")
-	}
-	anlogger.Debugf(nil, "lambda-initialization : logout.go : start with USER_TABLE = [%s]", userTableName)
 
 	userProfileTable, ok = os.LookupEnv("USER_PROFILE_TABLE")
 	if !ok {
@@ -71,14 +64,14 @@ func init() {
 	anlogger.Debugf(nil, "lambda-initialization : logout.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
-		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
+		WithRegion(commons.Region).WithMaxRetries(commons.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
 		anlogger.Fatalf(nil, "lambda-initialization : logout.go : error during initialization : %v", err)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : logout.go : aws session was successfully initialized")
 
-	secretWord = apimodel.GetSecret(fmt.Sprintf(apimodel.SecretWordKeyBase, env), apimodel.SecretWordKeyName, awsSession, anlogger, nil)
+	secretWord = commons.GetSecret(fmt.Sprintf(commons.SecretWordKeyBase, env), commons.SecretWordKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "lambda-initialization : logout.go : dynamodb client was successfully initialized")
@@ -109,11 +102,11 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	anlogger.Debugf(lc, "logout.go : handle request %v", request)
 
-	if apimodel.IsItWarmUpRequest(request.Body, anlogger, lc) {
+	if commons.IsItWarmUpRequest(request.Body, anlogger, lc) {
 		return events.APIGatewayProxyResponse{}, nil
 	}
 
-	appVersion, isItAndroid, ok, errStr := apimodel.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
+	appVersion, isItAndroid, ok, errStr := commons.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "logout.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
@@ -121,12 +114,12 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	reqParam, ok := parseParams(request.Body, lc)
 	if !ok {
-		errStr := apimodel.WrongRequestParamsClientError
+		errStr := commons.WrongRequestParamsClientError
 		anlogger.Errorf(lc, "logout.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	userId, ok, errStr := apimodel.Login(appVersion, isItAndroid, reqParam.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
+	userId, ok, errStr := commons.Login(appVersion, isItAndroid, reqParam.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "logout.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
@@ -135,7 +128,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	newSessionToken, err := uuid.NewV4()
 	if err != nil {
 		anlogger.Errorf(lc, "logout.go : error while generate newSessionToken for userId [%s] : %v", userId, err)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: commons.InternalServerError}, nil
 	}
 
 	ok, errStr = updateSessionToken(userId, newSessionToken.String(), lc)
@@ -144,15 +137,15 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	event := apimodel.NewUserLogoutEvent(userId)
-	apimodel.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+	event := commons.NewUserLogoutEvent(userId)
+	commons.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
-	resp := apimodel.BaseResponse{}
+	resp := commons.BaseResponse{}
 	body, err := json.Marshal(resp)
 	if err != nil {
 		anlogger.Errorf(lc, "logout.go : error while marshaling resp object %v for userId [%s] : %v", resp, userId, err)
 		anlogger.Errorf(lc, "logout.go : userId [%s], return %s to client", userId, errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: commons.InternalServerError}, nil
 	}
 	anlogger.Debugf(lc, "logout.go : return body=%s to client, userId [%s]", string(body), userId)
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
@@ -164,8 +157,8 @@ func updateSessionToken(userId, sessionToken string, lc *lambdacontext.LambdaCon
 
 	input := &dynamodb.UpdateItemInput{
 		ExpressionAttributeNames: map[string]*string{
-			"#token":     aws.String(apimodel.SessionTokenColumnName),
-			"#updatedAt": aws.String(apimodel.TokenUpdatedTimeColumnName),
+			"#token":     aws.String(commons.SessionTokenColumnName),
+			"#updatedAt": aws.String(commons.TokenUpdatedTimeColumnName),
 		},
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":tV": {
@@ -176,7 +169,7 @@ func updateSessionToken(userId, sessionToken string, lc *lambdacontext.LambdaCon
 			},
 		},
 		Key: map[string]*dynamodb.AttributeValue{
-			apimodel.UserIdColumnName: {
+			commons.UserIdColumnName: {
 				S: aws.String(userId),
 			},
 		},
@@ -188,7 +181,7 @@ func updateSessionToken(userId, sessionToken string, lc *lambdacontext.LambdaCon
 
 	if err != nil {
 		anlogger.Errorf(lc, "logout.go : error update sessionToken [%s] for userId [%s] : %v", sessionToken, userId, err)
-		return false, apimodel.InternalServerError
+		return false, commons.InternalServerError
 	}
 
 	anlogger.Debugf(lc, "logout.go : successfully update sessionToken [%s] for userId [%s]", sessionToken, userId)

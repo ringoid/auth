@@ -10,29 +10,6 @@ Mappings:
       test: "logs7.papertrailapp.com:16637"
       prod: "logs7.papertrailapp.com:16747"
 
-  UserTableCUMap:
-    test:
-      wcumax: 1
-      wcucrt: 1
-      wcumin: 1
-      rcumax: 1
-      rcucrt: 1
-      rcumin: 1
-    stage:
-      wcumax: 1
-      wcucrt: 1
-      wcumin: 1
-      rcumax: 1
-      rcucrt: 1
-      rcumin: 1
-    prod:
-      wcumax: should-be-prod-value
-      wcucrt: should-be-prod-value
-      wcumin: should-be-prod-value
-      rcumax: should-be-prod-value
-      rcucrt: should-be-prod-value
-      rcumin: should-be-prod-value
-
   UserProfileTableCUMap:
     test:
       wcumax: 1
@@ -84,14 +61,6 @@ Mappings:
       test: test-warm-up-auth
       stage: stage-warm-up-auth
       prod: prod-warm-up-auth
-    StartAuthFunction:
-      test: test-start-auth
-      stage: stage-start-auth
-      prod: prod-start-auth
-    CompleteAuthFunction:
-      test: test-complete-auth
-      stage: stage-complete-auth
-      prod: prod-complete-auth
     CreateAuthFunction:
       test: test-create-auth
       stage: stage-create-auth
@@ -112,33 +81,10 @@ Mappings:
       test: test-logout-auth
       stage: stage-logout-auth
       prod: prod-logout-auth
-    InternalHandleAsyncTaskFunction:
-      test: test-internal-handle-async-task-auth
-      stage: stage-internal-handle-async-task-auth
-      prod: prod-internal-handle-async-task-auth
-    InternalStartAuthFunction:
-      test: test-internal-start-auth
-      stage: stage-internal-start-auth
-      prod: prod-internal-start-auth
-    InternalCompleteAuthFunction:
-      test: test-internal-complete-auth
-      stage: stage-internal-complete-auth
-      prod: prod-internal-complete-auth
     InternalCleanDbAuthFunction:
       test: test-internal-clean-db-auth
       stage: stage-internal-clean-db-auth
       prod: prod-internal-clean-db-auth
-
-  SqsName:
-    AsyncTask:
-      test: test-async-task-queue
-      stage: stage-async-task-queue
-      prod: prod-async-task-queue
-    AsyncDeadTask:
-      test: test-async-task-dead-queue
-      stage: stage-async-task-dead-queue
-      prod: prod-async-task-dead-queue
-
 
 Parameters:
   Env:
@@ -149,18 +95,6 @@ Parameters:
       - stage
       - prod
     Description: Env name
-  CloudWatchNexmoNotCompleteVerificationInTimeMetricName:
-    Type: String
-    Default: Nexmo-NotCompleteVerificationInTime
-  CloudWatchTwilioNotCompleteVerificationInTimeMetricName:
-    Type: String
-    Default: Twilio-NotCompleteVerificationInTime
-  CloudWatchNexmoCompleteVerificationInTimeMetricName:
-    Type: String
-    Default: Nexmo-CompleteVerificationInTime
-  CloudWatchTwilioCompleteVerificationInTimeMetricName:
-    Type: String
-    Default: Twilio-CompleteVerificationInTime
   CloudWatchNewUserWasCreatedMetricName:
     Type: String
     Default: NewUserWasCreated
@@ -178,20 +112,14 @@ Globals:
             DELIVERY_STREAM:
               Fn::ImportValue:
                 !Join [ "-", [ !Ref Env, DeliveryStreamExportName] ]
-            USER_TABLE: !Ref UserTable
             USER_PROFILE_TABLE: !Ref UserProfileTable
             USER_SETTINGS_TABLE: !Ref UserSettingsTable
             COMMON_STREAM:
               Fn::ImportValue:
                 !Join [ "-", [ !Ref Env, CommonEventStreamExportName] ]
-            NEED_WARM_UP_LAMBDA_NAMES: !Join [ ",", [ !FindInMap [FunctionName, StartAuthFunction, !Ref Env], !FindInMap [FunctionName, CompleteAuthFunction, !Ref Env], !FindInMap [FunctionName, CreateAuthFunction, !Ref Env], !FindInMap [FunctionName, UpdateSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, GetSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, InternalGetUserIdFunction, !Ref Env], !FindInMap [FunctionName, LogoutAuthFunction, !Ref Env] ]]
-            ASYNC_TASK_SQS_QUEUE: !Ref AsyncTaskSqsQueue
-            BASE_CLOUD_WATCH_NAMESPACE: !Join [ "-", [ !Ref Env, auth, service] ]
-            CLOUD_WATCH_NEXMO_NOT_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME: !Ref CloudWatchNexmoNotCompleteVerificationInTimeMetricName
-            CLOUD_WATCH_TWILIO_NOT_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME: !Ref CloudWatchTwilioNotCompleteVerificationInTimeMetricName
-            CLOUD_WATCH_NEXMO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME: !Ref CloudWatchNexmoCompleteVerificationInTimeMetricName
-            CLOUD_WATCH_TWILIO_COMPLETE_VERIFICATION_IN_TIME_METRIC_NAME: !Ref CloudWatchTwilioCompleteVerificationInTimeMetricName
+            NEED_WARM_UP_LAMBDA_NAMES: !Join [ ",", [ !FindInMap [FunctionName, CreateAuthFunction, !Ref Env], !FindInMap [FunctionName, UpdateSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, GetSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, InternalGetUserIdFunction, !Ref Env], !FindInMap [FunctionName, LogoutAuthFunction, !Ref Env] ]]
             CLOUD_WATCH_NEW_USER_WAS_CREATED: !Ref CloudWatchNewUserWasCreatedMetricName
+            BASE_CLOUD_WATCH_NAMESPACE: !Join [ "-", [ !Ref Env, auth, service] ]
         Tags:
           Company: Ringoid
           Service: auth
@@ -277,70 +205,6 @@ Resources:
         Fn::GetAtt:
           - ScheduledWarmUpFunctionRule
           - Arn
-
-  StartAuthFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !FindInMap [FunctionName, StartAuthFunction, !Ref Env]
-      Handler: start
-      CodeUri: ./start-auth.zip
-      Description: Start auth function
-      Policies:
-        - AmazonDynamoDBFullAccess
-        - SecretsManagerReadWrite
-        - AmazonKinesisFirehoseFullAccess
-        - AmazonSQSFullAccess
-      Events:
-        StartEvent:
-          Type: Api
-          Properties:
-            Path: /start_verification
-            Method: post
-
-  InternalStartAuthFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !FindInMap [FunctionName, InternalStartAuthFunction, !Ref Env]
-      Handler: internal_start
-      CodeUri: ./internal_start.zip
-      Description: Internal Start auth function
-      Policies:
-        - AmazonDynamoDBFullAccess
-        - SecretsManagerReadWrite
-        - AmazonKinesisFirehoseFullAccess
-        - AmazonSQSFullAccess
-
-  CompleteAuthFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !FindInMap [FunctionName, CompleteAuthFunction, !Ref Env]
-      Handler: complete
-      CodeUri: ./complete-auth.zip
-      Description: Complete auth function
-      Policies:
-        - AmazonDynamoDBFullAccess
-        - SecretsManagerReadWrite
-        - AmazonKinesisFirehoseFullAccess
-        - CloudWatchFullAccess
-      Events:
-        CompleteEvent:
-          Type: Api
-          Properties:
-            Path: /complete_verification
-            Method: post
-
-  InternalCompleteAuthFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !FindInMap [FunctionName, InternalCompleteAuthFunction, !Ref Env]
-      Handler: internal_complete
-      CodeUri: ./internal_complete.zip
-      Description: Internal Complete auth function
-      Policies:
-        - AmazonDynamoDBFullAccess
-        - SecretsManagerReadWrite
-        - AmazonKinesisFirehoseFullAccess
-        - CloudWatchFullAccess
 
   CreateAuthFunction:
     Type: AWS::Serverless::Function
@@ -430,46 +294,6 @@ Resources:
             Path: /logout
             Method: post
 
-  AsyncTaskSqsQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !FindInMap [SqsName, AsyncTask, !Ref Env]
-      VisibilityTimeout: 300
-      RedrivePolicy:
-        deadLetterTargetArn:
-          Fn::GetAtt:
-            - AsyncTaskDeadMessageSqsQueue
-            - Arn
-        maxReceiveCount: 3
-
-  AsyncTaskDeadMessageSqsQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !FindInMap [SqsName, AsyncDeadTask, !Ref Env]
-      VisibilityTimeout: 300
-
-  InternalHandleAsyncTaskFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !FindInMap [FunctionName, InternalHandleAsyncTaskFunction, !Ref Env]
-      Handler: internal_handle_task
-      CodeUri: ./internal_handle_task.zip
-      Description: Handle async task from the queue
-      Policies:
-        - AmazonDynamoDBFullAccess
-        - AmazonSQSFullAccess
-        - CloudWatchFullAccess
-      Events:
-        StartEvent:
-          Type: SQS
-          Properties:
-            Queue:
-              Fn::GetAtt:
-                - AsyncTaskSqsQueue
-                - Arn
-            BatchSize: 10
-
-
   UserProfileTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -558,254 +382,6 @@ Resources:
           PredefinedMetricType: DynamoDBReadCapacityUtilization
 
 
-  UserTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-          TableName: !Join [ "-", [ !Ref Env, Auth, UserTable] ]
-          AttributeDefinitions:
-            -
-              AttributeName: phone
-              AttributeType: S
-            -
-              AttributeName: user_id
-              AttributeType: S
-            -
-              AttributeName: session_id
-              AttributeType: S
-          KeySchema:
-            -
-              AttributeName: phone
-              KeyType: HASH
-
-          ProvisionedThroughput:
-            ReadCapacityUnits: !FindInMap [UserTableCUMap, !Ref Env, rcucrt]
-            WriteCapacityUnits: !FindInMap [UserTableCUMap, !Ref Env, wcucrt]
-
-          GlobalSecondaryIndexes:
-            -
-              IndexName: userIdGSI
-              KeySchema:
-                -
-                  AttributeName: user_id
-                  KeyType: HASH
-              Projection:
-                ProjectionType: ALL
-              ProvisionedThroughput:
-                ReadCapacityUnits: !FindInMap [UserTableCUMap, !Ref Env, rcucrt]
-                WriteCapacityUnits: !FindInMap [UserTableCUMap, !Ref Env, wcucrt]
-            -
-              IndexName: sessionGSI
-              KeySchema:
-                -
-                  AttributeName: session_id
-                  KeyType: HASH
-              Projection:
-                ProjectionType: ALL
-              ProvisionedThroughput:
-                ReadCapacityUnits: !FindInMap [UserTableCUMap, !Ref Env, rcucrt]
-                WriteCapacityUnits: !FindInMap [UserTableCUMap, !Ref Env, wcucrt]
-          Tags:
-            - Key: Company
-              Value: Ringoid
-            - Key: Service
-              Value: auth
-            - Key: Environment
-              Value: !Ref Env
-
-  UserTableWriteCapacityScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: UserTable
-    Properties:
-      MaxCapacity: !FindInMap [UserTableCUMap, !Ref Env, wcumax]
-      MinCapacity: !FindInMap [UserTableCUMap, !Ref Env, wcumin]
-      ResourceId: !Join
-        - /
-        - - table
-          - !Join [ "-", [ !Ref Env, Auth, UserTable] ]
-      RoleARN: !GetAtt
-        - ScalingRole
-        - Arn
-      ScalableDimension: "dynamodb:table:WriteCapacityUnits"
-      ServiceNamespace: dynamodb
-
-  UserTableReadCapacityScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: UserTable
-    Properties:
-      MaxCapacity: !FindInMap [UserTableCUMap, !Ref Env, rcumax]
-      MinCapacity: !FindInMap [UserTableCUMap, !Ref Env, rcumin]
-      ResourceId: !Join
-        - /
-        - - table
-          - !Join [ "-", [ !Ref Env, Auth, UserTable] ]
-      RoleARN: !GetAtt
-        - ScalingRole
-        - Arn
-      ScalableDimension: "dynamodb:table:ReadCapacityUnits"
-      ServiceNamespace: dynamodb
-
-  UserTableWriteScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: UserTable
-    Properties:
-      PolicyName: WriteAutoScalingPolicy
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId:
-        Ref: UserTableWriteCapacityScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 70
-        ScaleInCooldown: 60
-        ScaleOutCooldown: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: DynamoDBWriteCapacityUtilization
-
-  UserTableReadScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: UserTable
-    Properties:
-      PolicyName: ReadAutoScalingPolicy
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId:
-        Ref: UserTableReadCapacityScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 70
-        ScaleInCooldown: 60
-        ScaleOutCooldown: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: DynamoDBReadCapacityUtilization
-
-  UserTableUserIdGSIWriteCapacityScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: UserTable
-    Properties:
-      MaxCapacity: !FindInMap [UserTableCUMap, !Ref Env, wcumax]
-      MinCapacity: !FindInMap [UserTableCUMap, !Ref Env, wcumin]
-      ResourceId: !Join
-        - /
-        - - table
-          - !Join [ "-", [ !Ref Env, Auth, UserTable] ]
-          - index
-          - userIdGSI
-      RoleARN: !GetAtt
-        - ScalingRole
-        - Arn
-      ScalableDimension: "dynamodb:index:WriteCapacityUnits"
-      ServiceNamespace: dynamodb
-
-  UserTableUserIdGSIReadCapacityScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: UserTable
-    Properties:
-      MaxCapacity: !FindInMap [UserTableCUMap, !Ref Env, rcumax]
-      MinCapacity: !FindInMap [UserTableCUMap, !Ref Env, rcumin]
-      ResourceId: !Join
-        - /
-        - - table
-          - !Join [ "-", [ !Ref Env, Auth, UserTable] ]
-          - index
-          - userIdGSI
-      RoleARN: !GetAtt
-        - ScalingRole
-        - Arn
-      ScalableDimension: "dynamodb:index:ReadCapacityUnits"
-      ServiceNamespace: dynamodb
-
-  UserTableUserIdGSIWriteScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: UserTable
-    Properties:
-      PolicyName: WriteAutoScalingPolicy
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId:
-        Ref: UserTableUserIdGSIWriteCapacityScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 70
-        ScaleInCooldown: 60
-        ScaleOutCooldown: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: DynamoDBWriteCapacityUtilization
-
-  UserTableUserIdGSIReadScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: UserTable
-    Properties:
-      PolicyName: ReadAutoScalingPolicy
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId:
-        Ref: UserTableUserIdGSIReadCapacityScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 70
-        ScaleInCooldown: 60
-        ScaleOutCooldown: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: DynamoDBReadCapacityUtilization
-
-  UserTableSessionGSIWriteCapacityScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: UserTable
-    Properties:
-      MaxCapacity: !FindInMap [UserTableCUMap, !Ref Env, wcumax]
-      MinCapacity: !FindInMap [UserTableCUMap, !Ref Env, wcumin]
-      ResourceId: !Join
-        - /
-        - - table
-          - !Join [ "-", [ !Ref Env, Auth, UserTable] ]
-          - index
-          - sessionGSI
-      RoleARN: !GetAtt
-        - ScalingRole
-        - Arn
-      ScalableDimension: "dynamodb:index:WriteCapacityUnits"
-      ServiceNamespace: dynamodb
-
-  UserTableSessionGSIReadCapacityScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: UserTable
-    Properties:
-      MaxCapacity: !FindInMap [UserTableCUMap, !Ref Env, rcumax]
-      MinCapacity: !FindInMap [UserTableCUMap, !Ref Env, rcumin]
-      ResourceId: !Join
-        - /
-        - - table
-          - !Join [ "-", [ !Ref Env, Auth, UserTable] ]
-          - index
-          - sessionGSI
-      RoleARN: !GetAtt
-        - ScalingRole
-        - Arn
-      ScalableDimension: "dynamodb:index:ReadCapacityUnits"
-      ServiceNamespace: dynamodb
-
-  UserTableSessionGSIWriteScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: UserTable
-    Properties:
-      PolicyName: WriteAutoScalingPolicy
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId:
-        Ref: UserTableSessionGSIWriteCapacityScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 70
-        ScaleInCooldown: 60
-        ScaleOutCooldown: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: DynamoDBWriteCapacityUtilization
-
-  UserTableSessionGSIReadScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: UserTable
-    Properties:
-      PolicyName: ReadAutoScalingPolicy
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId:
-        Ref: UserTableSessionGSIReadCapacityScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 70
-        ScaleInCooldown: 60
-        ScaleOutCooldown: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: DynamoDBReadCapacityUtilization
-
   UserSettingsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -892,55 +468,11 @@ Resources:
         PredefinedMetricSpecification:
           PredefinedMetricType: DynamoDBReadCapacityUtilization
 
-  CloudWatchAlarmTooManyLostUsersNexmo:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Join [ "-", [ !Ref Env, auth, tooManyLostUsers, Nexmo] ]
-      AlarmDescription: Alarm - tooManyLostUsers - Nexmo
-      ActionsEnabled: true
-      AlarmActions:
-        - Fn::ImportValue: !Join [ "-", [ !Ref Env, SNSAlarmTopicExport] ]
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      OKActions:
-        - Fn::ImportValue: !Join [ "-", [ !Ref Env, SNSAlarmTopicExport] ]
-      EvaluationPeriods: 1
-      MetricName: !Ref CloudWatchNexmoNotCompleteVerificationInTimeMetricName
-      Namespace: !Join [ "-", [ !Ref Env, auth, service] ]
-      Period: 60
-      Threshold: 1
-      Statistic: Sum
-
-  CloudWatchAlarmTooManyLostUsersTwilio:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Join [ "-", [ !Ref Env, auth, tooManyLostUsers, Twilio] ]
-      AlarmDescription: Alarm - tooManyLostUsers - Twilio
-      ActionsEnabled: true
-      AlarmActions:
-        - Fn::ImportValue: !Join [ "-", [ !Ref Env, SNSAlarmTopicExport] ]
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      OKActions:
-        - Fn::ImportValue: !Join [ "-", [ !Ref Env, SNSAlarmTopicExport] ]
-      EvaluationPeriods: 1
-      MetricName: !Ref CloudWatchTwilioNotCompleteVerificationInTimeMetricName
-      Namespace: !Join [ "-", [ !Ref Env, auth, service] ]
-      Period: 60
-      Threshold: 1
-      Statistic: Sum
-
 Outputs:
   InternalGetUserIdFunctionExport:
     Value: !FindInMap [FunctionName, InternalGetUserIdFunction, !Ref Env]
     Export:
       Name: !Join [ "-", [ !Ref Env, InternalGetUserIdFunctionExport] ]
-  InternalStartAuthFunctionExport:
-    Value: !FindInMap [FunctionName, InternalStartAuthFunction, !Ref Env]
-    Export:
-      Name: !Join [ "-", [ !Ref Env, InternalStartAuthFunctionExport] ]
-  InternalCompleteAuthFunctionExport:
-    Value: !FindInMap [FunctionName, InternalCompleteAuthFunction, !Ref Env]
-    Export:
-      Name: !Join [ "-", [ !Ref Env, InternalCompleteAuthFunctionExport] ]
   InternalCleanDbAuthFunctionExport:
     Value: !FindInMap [FunctionName, InternalCleanDbAuthFunction, !Ref Env]
     Export:

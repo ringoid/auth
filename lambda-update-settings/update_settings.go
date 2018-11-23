@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	basicLambda "github.com/aws/aws-lambda-go/lambda"
-	"../sys_log"
 	"../apimodel"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/aws"
@@ -16,9 +15,10 @@ import (
 	"strconv"
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/service/kinesis"
+	"github.com/ringoid/commons"
 )
 
-var anlogger *syslog.Logger
+var anlogger *commons.Logger
 var awsDbClient *dynamodb.DynamoDB
 var userProfileTable string
 var userSettingsTable string
@@ -49,7 +49,7 @@ func init() {
 	}
 	fmt.Printf("lambda-initialization : update_settings.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
-	anlogger, err = syslog.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "update-settings-auth"))
+	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "update-settings-auth"))
 	if err != nil {
 		fmt.Errorf("lambda-initialization : update_settings.go : error during startup : %v\n", err)
 		os.Exit(1)
@@ -71,14 +71,14 @@ func init() {
 	anlogger.Debugf(nil, "lambda-initialization : update_settings.go : start with USER_SETTINGS_TABLE = [%s]", userSettingsTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
-		WithRegion(apimodel.Region).WithMaxRetries(apimodel.MaxRetries).
+		WithRegion(commons.Region).WithMaxRetries(commons.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
 	if err != nil {
 		anlogger.Fatalf(nil, "lambda-initialization : update_settings.go : error during initialization : %v", err)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : update_settings.go : aws session was successfully initialized")
 
-	secretWord = apimodel.GetSecret(fmt.Sprintf(apimodel.SecretWordKeyBase, env), apimodel.SecretWordKeyName, awsSession, anlogger, nil)
+	secretWord = commons.GetSecret(fmt.Sprintf(commons.SecretWordKeyBase, env), commons.SecretWordKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "lambda-initialization : update_settings.go : dynamodb client was successfully initialized")
@@ -109,11 +109,11 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	anlogger.Debugf(lc, "update_settings.go : start handle request %v", request)
 
-	if apimodel.IsItWarmUpRequest(request.Body, anlogger, lc) {
+	if commons.IsItWarmUpRequest(request.Body, anlogger, lc) {
 		return events.APIGatewayProxyResponse{}, nil
 	}
 
-	appVersion, isItAndroid, ok, errStr := apimodel.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
+	appVersion, isItAndroid, ok, errStr := commons.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "update_settings.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
@@ -125,7 +125,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	userId, ok, errStr := apimodel.Login(appVersion, isItAndroid, reqParam.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
+	userId, ok, errStr := commons.Login(appVersion, isItAndroid, reqParam.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "update_settings.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
@@ -139,21 +139,21 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	event := apimodel.NewUserSettingsUpdatedEvent(settings)
-	apimodel.SendAnalyticEvent(event, settings.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+	event := commons.NewUserSettingsUpdatedEvent(userId, settings.SafeDistanceInMeter, settings.PushMessages, settings.PushMatches, settings.PushLikes)
+	commons.SendAnalyticEvent(event, settings.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	partitionKey := userId
-	ok, errStr = apimodel.SendCommonEvent(event, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
+	ok, errStr = commons.SendCommonEvent(event, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "update_settings.go : userId [%s], return %s to client", userId, errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	resp := apimodel.BaseResponse{}
+	resp := commons.BaseResponse{}
 	body, err := json.Marshal(resp)
 	if err != nil {
 		anlogger.Errorf(lc, "update_settings.go : error while marshaling resp object for userId [%s] : %v", userId, err)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: apimodel.InternalServerError}, nil
+		return events.APIGatewayProxyResponse{StatusCode: 200, Body: commons.InternalServerError}, nil
 	}
 	anlogger.Debugf(lc, "update_settings.go : return body=%s for userId [%s]", string(body), userId)
 	//return OK with AccessToken
@@ -166,17 +166,17 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Upda
 	err := json.Unmarshal([]byte(params), &req)
 	if err != nil {
 		anlogger.Errorf(lc, "update_settings.go : error marshaling required params from the string [%s] : %v", params, err)
-		return nil, false, apimodel.InternalServerError
+		return nil, false, commons.InternalServerError
 	}
 
 	if req.SafeDistanceInMeter < 0 {
 		anlogger.Errorf(lc, "update_settings.go : wrong safeDistanceInMeter [%d] request param, req %v", req.SafeDistanceInMeter, req)
-		return nil, false, apimodel.WrongRequestParamsClientError
+		return nil, false, commons.WrongRequestParamsClientError
 	}
 
 	if req.PushLikes != "NONE" && req.PushLikes != "EVERY" && req.PushLikes != "10_NEW" && req.PushLikes != "100_NEW" {
 		anlogger.Errorf(lc, "update_settings.go : wrong pushLikes [%s] request param, req %v", req.PushLikes, req)
-		return nil, false, apimodel.WrongRequestParamsClientError
+		return nil, false, commons.WrongRequestParamsClientError
 	}
 
 	anlogger.Debugf(lc, "update_settings.go : successfully parse request string [%s] to %v", params, req)
@@ -189,10 +189,10 @@ func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.Lambd
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
-				"#safeDistanceInMeter": aws.String(apimodel.SafeDistanceInMeterColumnName),
-				"#pushMessages":        aws.String(apimodel.PushMessagesColumnName),
-				"#pushMatches":         aws.String(apimodel.PushMatchesColumnName),
-				"#pushLikes":           aws.String(apimodel.PushLikesColumnName),
+				"#safeDistanceInMeter": aws.String(commons.SafeDistanceInMeterColumnName),
+				"#pushMessages":        aws.String(commons.PushMessagesColumnName),
+				"#pushMatches":         aws.String(commons.PushMatchesColumnName),
+				"#pushLikes":           aws.String(commons.PushLikesColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":safeDistanceInMeterV": {
@@ -209,7 +209,7 @@ func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.Lambd
 				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
-				apimodel.UserIdColumnName: {
+				commons.UserIdColumnName: {
 					S: aws.String(settings.UserId),
 				},
 			},
@@ -221,7 +221,7 @@ func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.Lambd
 	_, err := awsDbClient.UpdateItem(input)
 	if err != nil {
 		anlogger.Errorf(lc, "update_settings.go : error update user settings for userId [%s], settings=%v : %v", settings.UserId, settings, err)
-		return false, apimodel.InternalServerError
+		return false, commons.InternalServerError
 	}
 
 	anlogger.Debugf(lc, "update_settings.go : successfully update user settings for userId [%s], settings=%v", settings.UserId, settings)
