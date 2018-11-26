@@ -85,6 +85,10 @@ Mappings:
       test: test-internal-clean-db-auth
       stage: stage-internal-clean-db-auth
       prod: prod-internal-clean-db-auth
+    DeleteAuthFunction:
+      test: test-delete-user-auth
+      stage: stage-delete-user-auth
+      prod: prod-delete-user-auth
 
 Parameters:
   Env:
@@ -98,6 +102,9 @@ Parameters:
   CloudWatchNewUserWasCreatedMetricName:
     Type: String
     Default: NewUserWasCreated
+  CloudWatchNewUserCallDeletedMetricName:
+    Type: String
+    Default: UserCallDeleteHimself
 
 
 Globals:
@@ -117,8 +124,12 @@ Globals:
             COMMON_STREAM:
               Fn::ImportValue:
                 !Join [ "-", [ !Ref Env, CommonEventStreamExportName] ]
-            NEED_WARM_UP_LAMBDA_NAMES: !Join [ ",", [ !FindInMap [FunctionName, CreateAuthFunction, !Ref Env], !FindInMap [FunctionName, UpdateSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, GetSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, InternalGetUserIdFunction, !Ref Env], !FindInMap [FunctionName, LogoutAuthFunction, !Ref Env] ]]
+            INTERNAL_STREAM_NAME:
+              Fn::ImportValue:
+                !Join [ "-", [ !Ref Env, InternalEventStreamExportName] ]
+            NEED_WARM_UP_LAMBDA_NAMES: !Join [ ",", [ !FindInMap [FunctionName, DeleteAuthFunction, !Ref Env], !FindInMap [FunctionName, CreateAuthFunction, !Ref Env], !FindInMap [FunctionName, UpdateSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, GetSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, InternalGetUserIdFunction, !Ref Env], !FindInMap [FunctionName, LogoutAuthFunction, !Ref Env] ]]
             CLOUD_WATCH_NEW_USER_WAS_CREATED: !Ref CloudWatchNewUserWasCreatedMetricName
+            CLOUD_WATCH_USER_DELETE_HIMSELF: !Ref CloudWatchNewUserCallDeletedMetricName
             BASE_CLOUD_WATCH_NAMESPACE: !Join [ "-", [ !Ref Env, auth, service] ]
         Tags:
           Company: Ringoid
@@ -218,6 +229,7 @@ Resources:
         - AmazonKinesisFirehoseFullAccess
         - SecretsManagerReadWrite
         - AmazonKinesisFullAccess
+        - CloudWatchFullAccess
       Events:
         CompleteEvent:
           Type: Api
@@ -275,23 +287,24 @@ Resources:
         - SecretsManagerReadWrite
         - AmazonKinesisFullAccess
 
-  LogoutAuthFunction:
+  DeleteAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !FindInMap [FunctionName, LogoutAuthFunction, !Ref Env]
-      Handler: logout
-      CodeUri: ./logout-auth.zip
-      Description: Logout auth function
+      FunctionName: !FindInMap [FunctionName, DeleteAuthFunction, !Ref Env]
+      Handler: delete
+      CodeUri: ./delete.zip
+      Description: Delete user auth function
       Policies:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
         - AmazonKinesisFirehoseFullAccess
         - AmazonKinesisFullAccess
+        - CloudWatchFullAccess
       Events:
         StartEvent:
           Type: Api
           Properties:
-            Path: /logout
+            Path: /delete
             Method: post
 
   UserProfileTable:

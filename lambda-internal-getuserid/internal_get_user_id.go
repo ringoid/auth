@@ -91,7 +91,7 @@ func handler(ctx context.Context, request commons.InternalGetUserIdReq) (commons
 
 	resp := commons.InternalGetUserIdResp{}
 
-	userId, ok, errStr := commons.Login(request.BuildNum, request.IsItAndroid, request.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
+	userId, userStatus, ok, errStr := commons.Login(request.BuildNum, request.IsItAndroid, request.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", errStr)
 
@@ -113,6 +113,9 @@ func handler(ctx context.Context, request commons.InternalGetUserIdReq) (commons
 	}
 
 	resp.UserId = userId
+	if userStatus == commons.UserWasReportedStatus {
+		resp.IsUserReported = true
+	}
 
 	anlogger.Debugf(lc, "internal_get_user_id.go : successfully check access token and return userId [%s] in a response", resp.UserId)
 
