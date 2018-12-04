@@ -319,6 +319,7 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 			"#device":           aws.String(deviceColumnName),
 			"#os":               aws.String(osColumnName),
 			"#status":           aws.String(commons.UserStatusColumnName),
+			"#reportStatus":     aws.String(commons.UserReportStatusColumnName),
 		},
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":tV": {
@@ -360,6 +361,9 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 			":statusV": {
 				S: aws.String(commons.UserActiveStatus),
 			},
+			":reportStatusV": {
+				S: aws.String(commons.UserCleanReportStatus),
+			},
 		},
 		Key: map[string]*dynamodb.AttributeValue{
 			commons.UserIdColumnName: {
@@ -368,7 +372,7 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 		},
 		ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", commons.UserIdColumnName)),
 		TableName:           aws.String(userProfileTable),
-		UpdateExpression:    aws.String("SET #token = :tV, #updatedAt = :uV, #locale = :localeV, #sex = :sV, #year = :yV, #created = :cV, #onlineTime = :onlineTimeV, #buildNum = :buildNumV, #customerId = :cIdV, #currentIsAndroid = :currentIsAndroidV, #device = :deviceV, #os = :osV, #status = :statusV"),
+		UpdateExpression:    aws.String("SET #token = :tV, #updatedAt = :uV, #locale = :localeV, #sex = :sV, #year = :yV, #created = :cV, #onlineTime = :onlineTimeV, #buildNum = :buildNumV, #customerId = :cIdV, #currentIsAndroid = :currentIsAndroidV, #device = :deviceV, #os = :osV, #status = :statusV, #reportStatus = :reportStatusV"),
 	}
 
 	_, err := awsDbClient.UpdateItem(input)
@@ -439,8 +443,8 @@ func createUserSettingsIntoDynamo(settings *apimodel.UserSettings, lc *lambdacon
 				},
 			},
 			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", commons.UserIdColumnName)),
-			TableName:        aws.String(userSettingsTable),
-			UpdateExpression: aws.String("SET #safeDistanceInMeter = :safeDistanceInMeterV, #pushMessages = :pushMessagesV, #pushMatches = :pushMatchesV, #pushLikes = :pushLikesV"),
+			TableName:           aws.String(userSettingsTable),
+			UpdateExpression:    aws.String("SET #safeDistanceInMeter = :safeDistanceInMeterV, #pushMessages = :pushMessagesV, #pushMatches = :pushMatchesV, #pushLikes = :pushLikesV"),
 		}
 
 	_, err := awsDbClient.UpdateItem(input)

@@ -62,6 +62,7 @@ func DisableCurrentAccessToken(userId, tableName string, awsDbClient *dynamodb.D
 		ExpressionAttributeNames: map[string]*string{
 			"#token":     aws.String(commons.SessionTokenColumnName),
 			"#updatedAt": aws.String(commons.TokenUpdatedTimeColumnName),
+			"#status":    aws.String(commons.UserStatusColumnName),
 		},
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":tV": {
@@ -69,6 +70,9 @@ func DisableCurrentAccessToken(userId, tableName string, awsDbClient *dynamodb.D
 			},
 			":uV": {
 				S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
+			},
+			":statusV": {
+				S: aws.String(commons.UserHiddenStatus),
 			},
 		},
 		Key: map[string]*dynamodb.AttributeValue{
@@ -78,7 +82,7 @@ func DisableCurrentAccessToken(userId, tableName string, awsDbClient *dynamodb.D
 		},
 		ConditionExpression: aws.String(fmt.Sprintf("attribute_exists(%v)", commons.UserIdColumnName)),
 		TableName:           aws.String(tableName),
-		UpdateExpression:    aws.String("SET #token = :tV, #updatedAt = :uV"),
+		UpdateExpression:    aws.String("SET #token = :tV, #updatedAt = :uV, #status = :statusV"),
 	}
 
 	_, err = awsDbClient.UpdateItem(input)

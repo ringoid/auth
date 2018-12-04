@@ -121,7 +121,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	accessToken := request.QueryStringParameters["accessToken"]
 
-	userId, _, ok, errStr := commons.Login(appVersion, isItAndroid, accessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
+	userId, _, _, ok, errStr := commons.Login(appVersion, isItAndroid, accessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "get_settings.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil

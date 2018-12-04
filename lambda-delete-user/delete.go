@@ -153,26 +153,13 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	userId, userStatus, ok, errStr := commons.Login(appVersion, isItAndroid, reqParam.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
+	userId, _, userReportStatus, ok, errStr := commons.Login(appVersion, isItAndroid, reqParam.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "delete.go : return %s to client", errStr)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	if userStatus == commons.UserWasReportedStatus {
-		anlogger.Infof(lc, "delete.go : user with userId [%s] was reported, so don't delete him", userId)
-		ok, errStr = apimodel.DisableCurrentAccessToken(userId, userProfileTable, awsDbClient, anlogger, lc)
-		if !ok {
-			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
-		}
-	} else {
-		ok, errStr = apimodel.DeleteUserFromAuthService(userId, userProfileTable, userSettingsTable, awsDbClient, anlogger, lc)
-		if !ok {
-			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
-		}
-	}
-
-	event := commons.NewUserCallDeleteHimselfEvent(userId, userStatus == commons.UserWasReportedStatus)
+	event := commons.NewUserCallDeleteHimselfEvent(userId, userReportStatus)
 	commons.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	//send common events for neo4j
@@ -192,6 +179,19 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	//send cloudwatch metric
 	commons.SendCloudWatchMetric(baseCloudWatchNamespace, userDeleteHimselfMetricName, 1, awsCWClient, anlogger, lc)
+
+	if userReportStatus == commons.UserWasReportedStatus || userReportStatus == commons.UserWasReportInitiatorStatus {
+		anlogger.Infof(lc, "delete.go : user with userId [%s] was reported or was report initiator, so don't delete him", userId)
+		ok, errStr = apimodel.DisableCurrentAccessToken(userId, userProfileTable, awsDbClient, anlogger, lc)
+		if !ok {
+			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		}
+	} else {
+		ok, errStr = apimodel.DeleteUserFromAuthService(userId, userProfileTable, userSettingsTable, awsDbClient, anlogger, lc)
+		if !ok {
+			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		}
+	}
 
 	resp := commons.BaseResponse{}
 	body, err := json.Marshal(resp)
