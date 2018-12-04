@@ -24,6 +24,7 @@ func (req CreateReq) String() string {
 type CreateResp struct {
 	commons.BaseResponse
 	AccessToken string `json:"accessToken"`
+	CustomerId  string `json:"customerId"`
 }
 
 func (resp CreateResp) String() string {

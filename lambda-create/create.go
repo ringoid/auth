@@ -248,6 +248,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	resp := apimodel.CreateResp{
 		AccessToken: tokenToString,
+		CustomerId:  customerId.String(),
 	}
 
 	body, err := json.Marshal(resp)
