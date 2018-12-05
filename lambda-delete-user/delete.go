@@ -180,7 +180,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	//send cloudwatch metric
 	commons.SendCloudWatchMetric(baseCloudWatchNamespace, userDeleteHimselfMetricName, 1, awsCWClient, anlogger, lc)
 
-	if userReportStatus == commons.UserWasReportedStatus || userReportStatus == commons.UserWasReportInitiatorStatus {
+	if userReportStatus == commons.UserTakePartInReport {
 		anlogger.Infof(lc, "delete.go : user with userId [%s] was reported or was report initiator, so don't delete him", userId)
 		ok, errStr = apimodel.DisableCurrentAccessToken(userId, userProfileTable, awsDbClient, anlogger, lc)
 		if !ok {

@@ -113,10 +113,8 @@ func handler(ctx context.Context, request commons.InternalGetUserIdReq) (commons
 	}
 
 	resp.UserId = userId
-	if userReportStatus == commons.UserWasReportedStatus {
-		resp.IsUserReported = true
-	} else if userReportStatus == commons.UserWasReportInitiatorStatus {
-		resp.WasUserReportInitiator = true
+	if userReportStatus == commons.UserTakePartInReport {
+		resp.UserTakePartInReport = true
 	}
 
 	anlogger.Debugf(lc, "internal_get_user_id.go : successfully check access token and return userId [%s], userReportStatus [%s] in a response",

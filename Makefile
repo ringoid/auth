@@ -18,6 +18,8 @@ build:
 	GOOS=linux go build lambda-clean-db/clean.go
 	@echo '--- Building lambda-delete-user-auth function ---'
 	GOOS=linux go build lambda-delete-user/delete.go
+	@echo '--- Building lambda-handle-stream-image function ---'
+	GOOS=linux go build lambda-handle-stream/handle_stream.go lambda-handle-stream/block.go
 
 
 zip_lambda: build
@@ -35,6 +37,8 @@ zip_lambda: build
 	zip clean.zip ./clean
 	@echo '--- Zip delete-user-auth function ---'
 	zip delete.zip ./delete
+	@echo '--- Zip lambda-handle-stream-image function ---'
+	zip handle_stream.zip ./handle_stream
 
 test-deploy: zip_lambda
 	@echo '--- Build lambda test ---'
@@ -74,4 +78,6 @@ clean:
 	rm -rf clean
 	rm -rf delete.zip
 	rm -rf delete
+	rm -rf handle_stream
+	rm -rf handle_stream.zip
 

@@ -43,6 +43,10 @@ Mappings:
       test: test-delete-user-auth
       stage: stage-delete-user-auth
       prod: prod-delete-user-auth
+    InternalStreamConsumerFunction:
+      test: test-internal-stream-consumer-auth
+      stage: stage-internal-stream-consumer-auth
+      prod: prod-internal-stream-consumer-auth
 
 Parameters:
   Env:
@@ -228,6 +232,26 @@ Resources:
           Properties:
             Path: /delete
             Method: post
+
+  InternalStreamConsumerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !FindInMap [FunctionName, InternalStreamConsumerFunction, !Ref Env]
+      Handler: handle_stream
+      CodeUri: ../../handle_stream.zip
+      Description: Consumer for Kinesis stream
+      Policies:
+        - AmazonKinesisFullAccess
+        - AmazonDynamoDBFullAccess
+      Events:
+        CommonEventStreamEvent:
+          Type: Kinesis
+          Properties:
+            Stream:
+              Fn::ImportValue:
+                !Join [ "-", [ !Ref Env, InternalEventStreamExport] ]
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 1
 
   UserProfileTable:
     Type: AWS::DynamoDB::Table
