@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambdacontext"
-	"errors"
 	"github.com/ringoid/commons"
 )
 
@@ -68,7 +67,7 @@ func init() {
 func handler(ctx context.Context, event events.KinesisEvent) (error) {
 	lc, _ := lambdacontext.FromContext(ctx)
 
-	anlogger.Debugf(lc, "handle_stream.go : start handle request %v", event)
+	anlogger.Debugf(lc, "handle_stream.go : start handle request with [%d] records", len(event.Records))
 
 	for _, record := range event.Records {
 		body := record.Kinesis.Data
@@ -77,7 +76,7 @@ func handler(ctx context.Context, event events.KinesisEvent) (error) {
 		err := json.Unmarshal(body, &aEvent)
 		if err != nil {
 			anlogger.Errorf(lc, "handle_stream.go : error unmarshal body [%s] to BaseInternalEvent : %v", body, err)
-			return errors.New(fmt.Sprintf("error unmarshal body %s : %v", body, err))
+			return fmt.Errorf("error unmarshal body %s : %v", body, err)
 		}
 		anlogger.Debugf(lc, "handle_stream.go : handle record %v", aEvent)
 		switch aEvent.EventType {
@@ -89,7 +88,7 @@ func handler(ctx context.Context, event events.KinesisEvent) (error) {
 		}
 	}
 
-	anlogger.Debugf(lc, "handle_stream.go : successfully complete task %v", event)
+	anlogger.Debugf(lc, "handle_stream.go : successfully complete handling [%d] records", len(event.Records))
 	return nil
 }
 

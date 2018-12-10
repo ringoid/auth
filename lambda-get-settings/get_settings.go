@@ -109,6 +109,8 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	anlogger.Debugf(lc, "get_settings.go : start handle request %v", request)
 
+	sourceIp := request.RequestContext.Identity.SourceIP
+
 	if commons.IsItWarmUpRequest(request.Body, anlogger, lc) {
 		return events.APIGatewayProxyResponse{}, nil
 	}
@@ -139,6 +141,9 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		PushMatches:         settings.PushMatches,
 		PushLikes:           settings.PushLikes,
 	}
+
+	event := commons.NewGetUserSettingsEvent(userId, sourceIp)
+	commons.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	body, err := json.Marshal(resp)
 	if err != nil {
@@ -186,7 +191,7 @@ func getUserSettings(userId string, lc *lambdacontext.LambdaContext) (*apimodel.
 		PushMatches:         *result.Item[commons.PushMatchesColumnName].BOOL,
 		PushLikes:           *result.Item[commons.PushLikesColumnName].S,
 	}
-	anlogger.Debugf(lc, "get_settings.go : successfully return user setting for userId [%s], setting=%v", userId, userSettings)
+	anlogger.Infof(lc, "get_settings.go : successfully return user setting for userId [%s], setting=%v", userId, userSettings)
 	return userSettings, true, ""
 }
 

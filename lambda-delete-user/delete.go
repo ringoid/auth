@@ -64,14 +64,12 @@ func init() {
 	userProfileTable, ok = os.LookupEnv("USER_PROFILE_TABLE")
 	if !ok {
 		anlogger.Fatalf(nil, "lambda-initialization : delete.go : env can not be empty USER_PROFILE_TABLE")
-		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : delete.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
 
 	userSettingsTable, ok = os.LookupEnv("USER_SETTINGS_TABLE")
 	if !ok {
 		anlogger.Fatalf(nil, "lambda-initialization : delete.go : env can not be empty USER_SETTINGS_TABLE")
-		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : delete.go : start with USER_SETTINGS_TABLE = [%s]", userSettingsTable)
 
@@ -91,7 +89,6 @@ func init() {
 	deliveryStreamName, ok = os.LookupEnv("DELIVERY_STREAM")
 	if !ok {
 		anlogger.Fatalf(nil, "lambda-initialization : delete.go : env can not be empty DELIVERY_STREAM")
-		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : delete.go : start with DELIVERY_STREAM = [%s]", deliveryStreamName)
 
@@ -101,14 +98,12 @@ func init() {
 	commonStreamName, ok = os.LookupEnv("COMMON_STREAM")
 	if !ok {
 		anlogger.Fatalf(nil, "lambda-initialization : delete.go : env can not be empty COMMON_STREAM")
-		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : delete.go : start with COMMON_STREAM = [%s]", commonStreamName)
 
 	internalStreamName, ok = os.LookupEnv("INTERNAL_STREAM_NAME")
 	if !ok {
 		anlogger.Fatalf(nil, "lambda-initialization : delete.go : env can not be empty INTERNAL_STREAM_NAME")
-		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : delete.go : start with INTERNAL_STREAM_NAME = [%s]", internalStreamName)
 
@@ -136,6 +131,8 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	anlogger.Debugf(lc, "delete.go : handle request %v", request)
 
+	sourceIp := request.RequestContext.Identity.SourceIP
+
 	if commons.IsItWarmUpRequest(request.Body, anlogger, lc) {
 		return events.APIGatewayProxyResponse{}, nil
 	}
@@ -159,7 +156,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	event := commons.NewUserCallDeleteHimselfEvent(userId, userReportStatus)
+	event := commons.NewUserCallDeleteHimselfEvent(userId, sourceIp, userReportStatus)
 	commons.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	//send common events for neo4j
@@ -170,7 +167,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	//send event to internal stream
+	//send event to internal stream (image service is main target)
 	ok, errStr = commons.SendCommonEvent(event, userId, internalStreamName, partitionKey, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
@@ -181,7 +178,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	commons.SendCloudWatchMetric(baseCloudWatchNamespace, userDeleteHimselfMetricName, 1, awsCWClient, anlogger, lc)
 
 	if userReportStatus == commons.UserTakePartInReport {
-		anlogger.Infof(lc, "delete.go : user with userId [%s] was reported or was report initiator, so don't delete him", userId)
+		anlogger.Infof(lc, "delete.go : user with userId [%s] takes part in report, so don't delete him but mark as hidden", userId)
 		ok, errStr = apimodel.DisableCurrentAccessToken(userId, userProfileTable, awsDbClient, anlogger, lc)
 		if !ok {
 			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil

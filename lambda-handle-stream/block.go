@@ -14,13 +14,14 @@ import (
 func block(body []byte, userProfileTable string,
 	awsDbClient *dynamodb.DynamoDB, lc *lambdacontext.LambdaContext, anlogger *commons.Logger) error {
 
-	anlogger.Debugf(lc, "block.go : handle block event body %s", string(body))
 	var aEvent commons.UserBlockOtherEvent
 	err := json.Unmarshal([]byte(body), &aEvent)
 	if err != nil {
 		anlogger.Errorf(lc, "block.go : error unmarshal body [%s] to UserBlockOtherEvent: %v", string(body), err)
 		return errors.New(fmt.Sprintf("error unmarshal body %s : %v", string(body), err))
 	}
+
+	anlogger.Debugf(lc, "block.go : handle block event %v", aEvent)
 
 	ok, errStr := markUserAsPartOfReport(aEvent.TargetUserId, userProfileTable, awsDbClient, lc, anlogger)
 	if !ok {
@@ -31,7 +32,7 @@ func block(body []byte, userProfileTable string,
 		return errors.New(errStr)
 	}
 
-	anlogger.Debugf(lc, "block.go : successfully handle block event, body %s", string(body))
+	anlogger.Debugf(lc, "block.go : successfully handle block event %v", aEvent)
 	return nil
 }
 

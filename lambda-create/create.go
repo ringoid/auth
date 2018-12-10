@@ -68,15 +68,14 @@ func init() {
 
 	userProfileTable, ok = os.LookupEnv("USER_PROFILE_TABLE")
 	if !ok {
-		fmt.Printf("lambda-initialization : create.go : env can not be empty USER_PROFILE_TABLE")
+		anlogger.Fatalf(nil, "lambda-initialization : create.go : env can not be empty USER_PROFILE_TABLE")
 		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : create.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
 
 	userSettingsTable, ok = os.LookupEnv("USER_SETTINGS_TABLE")
 	if !ok {
-		fmt.Printf("lambda-initialization : create.go : env can not be empty USER_SETTINGS_TABLE")
-		os.Exit(1)
+		anlogger.Fatalf(nil, "lambda-initialization : create.go : env can not be empty USER_SETTINGS_TABLE")
 	}
 	anlogger.Debugf(nil, "lambda-initialization : create.go : start with USER_SETTINGS_TABLE = [%s]", userSettingsTable)
 
@@ -108,14 +107,12 @@ func init() {
 	deliveryStreamName, ok = os.LookupEnv("DELIVERY_STREAM")
 	if !ok {
 		anlogger.Fatalf(nil, "lambda-initialization : create.go : env can not be empty DELIVERY_STREAM")
-		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : create.go : start with DELIVERY_STREAM = [%s]", deliveryStreamName)
 
 	commonStreamName, ok = os.LookupEnv("COMMON_STREAM")
 	if !ok {
 		anlogger.Fatalf(nil, "lambda-initialization : create.go : env can not be empty COMMON_STREAM")
-		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : create.go : start with COMMON_STREAM = [%s]", commonStreamName)
 
@@ -133,6 +130,8 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	lc, _ := lambdacontext.FromContext(ctx)
 
 	anlogger.Debugf(lc, "create.go : start handle request %v", request)
+
+	sourceIp := request.RequestContext.Identity.SourceIP
 
 	if commons.IsItWarmUpRequest(request.Body, anlogger, lc) {
 		return events.APIGatewayProxyResponse{}, nil
@@ -166,7 +165,6 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	sourceIp := request.RequestContext.Identity.SourceIP
 	userId, ok, errStr := generateUserId(sourceIp, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
@@ -209,10 +207,10 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		isItAndroid)
 	commons.SendAnalyticEvent(eventAcceptTerms, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
-	eventNewUser := commons.NewUserProfileCreatedEvent(userId, reqParam.Sex, reqParam.YearOfBirth)
+	eventNewUser := commons.NewUserProfileCreatedEvent(userId, reqParam.Sex, sourceIp, reqParam.YearOfBirth)
 	commons.SendAnalyticEvent(eventNewUser, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
-	settingsEvent := commons.NewUserSettingsUpdatedEvent(userId, userSettings.SafeDistanceInMeter,
+	settingsEvent := commons.NewUserSettingsUpdatedEvent(userId, sourceIp, userSettings.SafeDistanceInMeter,
 		userSettings.PushMessages, userSettings.PushMatches, userSettings.PushLikes)
 	commons.SendAnalyticEvent(settingsEvent, userSettings.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
@@ -257,7 +255,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, commons.InternalServerError)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: commons.InternalServerError}, nil
 	}
-	anlogger.Infof(lc, "create.go : return successful resp [%s] for userId [%s]", string(body), userId)
+	anlogger.Infof(lc, "create.go : return access token for userId [%s]", userId)
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
 }
 
@@ -383,8 +381,8 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 		return false, commons.InternalServerError
 	}
 
-	anlogger.Infof(lc, "create.go : successfully create user userId [%s], sessionToken [%s], customerId [%s], buildNum [%d], isItAndroid [%v] for request [%s]",
-		userId, sessionToken, customerId, buildNum, isItAndroid, req)
+	anlogger.Infof(lc, "create.go : successfully create user userId [%s], customerId [%s], buildNum [%d], isItAndroid [%v] for request [%s]",
+		userId, customerId, buildNum, isItAndroid, req)
 
 	return true, ""
 }
@@ -453,15 +451,15 @@ func createUserSettingsIntoDynamo(settings *apimodel.UserSettings, lc *lambdacon
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case dynamodb.ErrCodeConditionalCheckFailedException:
-				anlogger.Warnf(lc, "start.go : warning, default settings for userId [%s] already exist", settings.UserId)
+				anlogger.Warnf(lc, "create.go : warning, default settings for userId [%s] already exist", settings.UserId)
 				return true, ""
 			}
 		}
-		anlogger.Errorf(lc, "start.go : error while creating default settings for userId [%s], settings=%v : %v", settings.UserId, settings, err)
+		anlogger.Errorf(lc, "create.go : error while creating default settings for userId [%s], settings=%v : %v", settings.UserId, settings, err)
 		return false, commons.InternalServerError
 	}
 
-	anlogger.Debugf(lc, "create.go : successfully create user default settings for userId [%s], settings=%v", settings.UserId, settings)
+	anlogger.Infof(lc, "create.go : successfully create default user's settings for userId [%s], settings=%v", settings.UserId, settings)
 	return true, ""
 }
 

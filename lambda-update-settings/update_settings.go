@@ -109,6 +109,8 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	anlogger.Debugf(lc, "update_settings.go : start handle request %v", request)
 
+	sourceIp := request.RequestContext.Identity.SourceIP
+
 	if commons.IsItWarmUpRequest(request.Body, anlogger, lc) {
 		return events.APIGatewayProxyResponse{}, nil
 	}
@@ -139,7 +141,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	event := commons.NewUserSettingsUpdatedEvent(userId, settings.SafeDistanceInMeter, settings.PushMessages, settings.PushMatches, settings.PushLikes)
+	event := commons.NewUserSettingsUpdatedEvent(userId, sourceIp, settings.SafeDistanceInMeter, settings.PushMessages, settings.PushMatches, settings.PushLikes)
 	commons.SendAnalyticEvent(event, settings.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	partitionKey := userId
@@ -224,7 +226,7 @@ func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.Lambd
 		return false, commons.InternalServerError
 	}
 
-	anlogger.Debugf(lc, "update_settings.go : successfully update user settings for userId [%s], settings=%v", settings.UserId, settings)
+	anlogger.Infof(lc, "update_settings.go : successfully update user settings for userId [%s], settings=%v", settings.UserId, settings)
 	return true, ""
 }
 

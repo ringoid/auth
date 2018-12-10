@@ -25,8 +25,7 @@ func DeleteUserFromAuthService(userId, userProfileTableName, userSettingsTableNa
 		return ok, errStr
 	}
 
-	anlogger.Infof(lc, "service_common.go : successfully delete user from the service (%s and %s) tables, userId [%s]",
-		userProfileTableName, userSettingsTableName, userId)
+	anlogger.Infof(lc, "service_common.go : successfully delete user from the service, userId [%s]", userId)
 
 	return true, ""
 }
@@ -54,7 +53,7 @@ func DisableCurrentAccessToken(userId, tableName string, awsDbClient *dynamodb.D
 
 	newSessionToken, err := uuid.NewV4()
 	if err != nil {
-		anlogger.Errorf(lc, "service_common.go : error while generate newSessionToken for userId [%s] : %v", userId, err)
+		anlogger.Errorf(lc, "service_common.go : error while generate new sessionToken for userId [%s] : %v", userId, err)
 		return false, commons.InternalServerError
 	}
 
@@ -92,6 +91,6 @@ func DisableCurrentAccessToken(userId, tableName string, awsDbClient *dynamodb.D
 		return false, commons.InternalServerError
 	}
 
-	anlogger.Debugf(lc, "service_common.go : successfully disable current access token for userId [%s]", userId)
+	anlogger.Infof(lc, "service_common.go : successfully disable current access token for userId [%s]", userId)
 	return true, ""
 }
