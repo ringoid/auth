@@ -10,52 +10,6 @@ Mappings:
       test: "logs7.papertrailapp.com:16637"
       prod: "logs7.papertrailapp.com:16747"
 
-  UserProfileTableCUMap:
-    test:
-      wcumax: 1
-      wcucrt: 1
-      wcumin: 1
-      rcumax: 1
-      rcucrt: 1
-      rcumin: 1
-    stage:
-      wcumax: 1
-      wcucrt: 1
-      wcumin: 1
-      rcumax: 1
-      rcucrt: 1
-      rcumin: 1
-    prod:
-      wcumax: should-be-prod-value
-      wcucrt: should-be-prod-value
-      wcumin: should-be-prod-value
-      rcumax: should-be-prod-value
-      rcucrt: should-be-prod-value
-      rcumin: should-be-prod-value
-
-  UserSettingsTableCUMap:
-    test:
-      wcumax: 1
-      wcucrt: 1
-      wcumin: 1
-      rcumax: 1
-      rcucrt: 1
-      rcumin: 1
-    stage:
-      wcumax: 1
-      wcucrt: 1
-      wcumin: 1
-      rcumax: 1
-      rcucrt: 1
-      rcumin: 1
-    prod:
-      wcumax: should-be-prod-value
-      wcucrt: should-be-prod-value
-      wcumin: should-be-prod-value
-      rcumax: should-be-prod-value
-      rcucrt: should-be-prod-value
-      rcumin: should-be-prod-value
-
   FunctionName:
     WarmUpFunction:
       test: test-warm-up-auth
@@ -142,37 +96,22 @@ Globals:
 
 Resources:
 
-  ScalingRole:
-    Type: AWS::IAM::Role
+  AuthApi:
+    Type: AWS::Serverless::Api
     Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          -
-            Effect: Allow
-            Principal:
-              Service:
-                - "application-autoscaling.amazonaws.com"
-            Action:
-              - "sts:AssumeRole"
-      Path: "/"
-      Policies:
-        -
-          PolicyName: root
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              -
-                Effect: Allow
-                Action:
-                  - "dynamodb:DescribeTable"
-                  - "dynamodb:UpdateTable"
-                  - "cloudwatch:PutMetricAlarm"
-                  - "cloudwatch:DescribeAlarms"
-                  - "cloudwatch:GetMetricStatistics"
-                  - "cloudwatch:SetAlarmState"
-                  - "cloudwatch:DeleteAlarms"
-                Resource: "*"
+      Name: !Ref AWS::StackName
+      StageName: Prod
+
+  APIBasePathMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    DependsOn: AuthApiProdStage
+    Properties:
+      BasePath: auth
+      DomainName:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, APIDomainNameExport] ]
+      RestApiId: !Ref AuthApi
+      Stage: Prod
 
   InternalCleanDbAuthFunction:
     Type: AWS::Serverless::Function
@@ -240,6 +179,7 @@ Resources:
           Properties:
             Path: /create_profile
             Method: post
+            RestApiId: !Ref AuthApi
 
   UpdateSettingsAuthFunction:
     Type: AWS::Serverless::Function
@@ -259,6 +199,7 @@ Resources:
           Properties:
             Path: /update_settings
             Method: post
+            RestApiId: !Ref AuthApi
 
   GetSettingsAuthFunction:
     Type: AWS::Serverless::Function
@@ -278,6 +219,7 @@ Resources:
           Properties:
             Path: /get_settings
             Method: get
+            RestApiId: !Ref AuthApi
 
   InternalGetUserIdFunction:
     Type: AWS::Serverless::Function
@@ -310,6 +252,7 @@ Resources:
           Properties:
             Path: /delete
             Method: post
+            RestApiId: !Ref AuthApi
 
   InternalStreamConsumerFunction:
     Type: AWS::Serverless::Function
@@ -335,6 +278,7 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
           TableName: !Join [ "-", [ !Ref Env, Auth, UserProfileTable] ]
+          BillingMode: PAY_PER_REQUEST
           AttributeDefinitions:
             -
               AttributeName: user_id
@@ -343,11 +287,6 @@ Resources:
             -
               AttributeName: user_id
               KeyType: HASH
-
-          ProvisionedThroughput:
-            ReadCapacityUnits: !FindInMap [UserProfileTableCUMap, !Ref Env, rcucrt]
-            WriteCapacityUnits: !FindInMap [UserProfileTableCUMap, !Ref Env, wcucrt]
-
           Tags:
             - Key: Company
               Value: Ringoid
@@ -355,74 +294,12 @@ Resources:
               Value: auth
             - Key: Environment
               Value: !Ref Env
-
-  UserProfileTableWriteCapacityScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: UserProfileTable
-    Properties:
-      MaxCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, wcumax]
-      MinCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, wcumin]
-      ResourceId: !Join
-        - /
-        - - table
-          - !Join [ "-", [ !Ref Env, Auth, UserProfileTable] ]
-      RoleARN: !GetAtt
-        - ScalingRole
-        - Arn
-      ScalableDimension: "dynamodb:table:WriteCapacityUnits"
-      ServiceNamespace: dynamodb
-
-  UserProfileTableReadCapacityScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: UserProfileTable
-    Properties:
-      MaxCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, rcumax]
-      MinCapacity: !FindInMap [UserProfileTableCUMap, !Ref Env, rcumin]
-      ResourceId: !Join
-        - /
-        - - table
-          - !Join [ "-", [ !Ref Env, Auth, UserProfileTable] ]
-      RoleARN: !GetAtt
-        - ScalingRole
-        - Arn
-      ScalableDimension: "dynamodb:table:ReadCapacityUnits"
-      ServiceNamespace: dynamodb
-
-  UserProfileTableWriteScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: UserProfileTable
-    Properties:
-      PolicyName: WriteAutoScalingPolicy
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId:
-        Ref: UserProfileTableWriteCapacityScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 70
-        ScaleInCooldown: 60
-        ScaleOutCooldown: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: DynamoDBWriteCapacityUtilization
-
-  UserProfileTableReadScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: UserProfileTable
-    Properties:
-      PolicyName: ReadAutoScalingPolicy
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId:
-        Ref: UserProfileTableReadCapacityScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 70
-        ScaleInCooldown: 60
-        ScaleOutCooldown: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: DynamoDBReadCapacityUtilization
-
 
   UserSettingsTable:
     Type: AWS::DynamoDB::Table
     Properties:
           TableName: !Join [ "-", [ !Ref Env, Auth, UserSettings] ]
+          BillingMode: PAY_PER_REQUEST
           AttributeDefinitions:
             -
               AttributeName: user_id
@@ -431,10 +308,6 @@ Resources:
             -
               AttributeName: user_id
               KeyType: HASH
-
-          ProvisionedThroughput:
-            ReadCapacityUnits: !FindInMap [UserSettingsTableCUMap, !Ref Env, rcucrt]
-            WriteCapacityUnits: !FindInMap [UserSettingsTableCUMap, !Ref Env, wcucrt]
           Tags:
             - Key: Company
               Value: Ringoid
@@ -442,68 +315,6 @@ Resources:
               Value: auth
             - Key: Environment
               Value: !Ref Env
-
-  UserSettingsTableWriteCapacityScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: UserSettingsTable
-    Properties:
-      MaxCapacity: !FindInMap [UserSettingsTableCUMap, !Ref Env, wcumax]
-      MinCapacity: !FindInMap [UserSettingsTableCUMap, !Ref Env, wcumin]
-      ResourceId: !Join
-        - /
-        - - table
-          - !Join [ "-", [ !Ref Env, Auth, UserSettings] ]
-      RoleARN: !GetAtt
-        - ScalingRole
-        - Arn
-      ScalableDimension: "dynamodb:table:WriteCapacityUnits"
-      ServiceNamespace: dynamodb
-
-  UserSettingsTableReadCapacityScalableTarget:
-    Type: AWS::ApplicationAutoScaling::ScalableTarget
-    DependsOn: UserSettingsTable
-    Properties:
-      MaxCapacity: !FindInMap [UserSettingsTableCUMap, !Ref Env, rcumax]
-      MinCapacity: !FindInMap [UserSettingsTableCUMap, !Ref Env, rcumin]
-      ResourceId: !Join
-        - /
-        - - table
-          - !Join [ "-", [ !Ref Env, Auth, UserSettings] ]
-      RoleARN: !GetAtt
-        - ScalingRole
-        - Arn
-      ScalableDimension: "dynamodb:table:ReadCapacityUnits"
-      ServiceNamespace: dynamodb
-
-  UserSettingsTableWriteScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: UserSettingsTable
-    Properties:
-      PolicyName: WriteAutoScalingPolicy
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId:
-        Ref: UserSettingsTableWriteCapacityScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 70
-        ScaleInCooldown: 60
-        ScaleOutCooldown: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: DynamoDBWriteCapacityUtilization
-
-  UserSettingsTableReadScalingPolicy:
-    Type: AWS::ApplicationAutoScaling::ScalingPolicy
-    DependsOn: UserSettingsTable
-    Properties:
-      PolicyName: ReadAutoScalingPolicy
-      PolicyType: TargetTrackingScaling
-      ScalingTargetId:
-        Ref: UserSettingsTableReadCapacityScalableTarget
-      TargetTrackingScalingPolicyConfiguration:
-        TargetValue: 70
-        ScaleInCooldown: 60
-        ScaleOutCooldown: 60
-        PredefinedMetricSpecification:
-          PredefinedMetricType: DynamoDBReadCapacityUtilization
 
 Outputs:
   InternalGetUserIdFunctionExport:

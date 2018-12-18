@@ -43,7 +43,7 @@ zip_lambda: build
 test-deploy: zip_lambda
 	@echo '--- Build lambda test ---'
 	@echo 'Package template'
-	sam package --template-file cf/test/auth-template.yaml --s3-bucket ringoid-cloudformation-template --output-template-file auth-template-packaged.yaml
+	sam package --template-file cf/auth-template.yaml --s3-bucket ringoid-cloudformation-template --output-template-file auth-template-packaged.yaml
 	@echo 'Deploy test-auth-stack'
 	sam deploy --template-file auth-template-packaged.yaml --s3-bucket ringoid-cloudformation-template --stack-name test-auth-stack --capabilities CAPABILITY_IAM --parameter-overrides Env=test --no-fail-on-empty-changeset
 
