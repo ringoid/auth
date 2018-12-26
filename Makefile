@@ -3,7 +3,6 @@ test-all: clean test-deploy
 prod-all: clean prod-deploy
 
 build:
-	go get -u github.com/ringoid/commons
 	@echo '--- Building create-profile-auth function ---'
 	GOOS=linux go build lambda-create/create.go
 	@echo '--- Building internal-get-user-id-auth function ---'
