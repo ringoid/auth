@@ -171,6 +171,11 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Upda
 		return nil, false, commons.InternalServerError
 	}
 
+	if req.AccessToken == "" {
+		anlogger.Errorf(lc, "update_settings.go : empty accessToken request param, req %v", req)
+		return nil, false, commons.WrongRequestParamsClientError
+	}
+
 	if req.SafeDistanceInMeter < 0 {
 		anlogger.Errorf(lc, "update_settings.go : wrong safeDistanceInMeter [%d] request param, req %v", req.SafeDistanceInMeter, req)
 		return nil, false, commons.WrongRequestParamsClientError
