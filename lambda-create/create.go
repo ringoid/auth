@@ -340,7 +340,7 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 				S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
 			},
 			":onlineTimeV": {
-				N: aws.String(fmt.Sprintf("%v", time.Now().Unix())),
+				N: aws.String(fmt.Sprintf("%v", commons.UnixTimeInMillis())),
 			},
 			":buildNumV": {
 				N: aws.String(strconv.Itoa(buildNum)),
