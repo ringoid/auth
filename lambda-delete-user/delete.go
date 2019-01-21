@@ -167,13 +167,6 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
 	}
 
-	//send event to internal stream (image service is main target)
-	ok, errStr = commons.SendCommonEvent(event, userId, internalStreamName, partitionKey, awsKinesisClient, anlogger, lc)
-	if !ok {
-		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
-	}
-
 	//send cloudwatch metric
 	commons.SendCloudWatchMetric(baseCloudWatchNamespace, userDeleteHimselfMetricName, 1, awsCWClient, anlogger, lc)
 
