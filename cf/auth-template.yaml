@@ -278,6 +278,8 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
           TableName: !Join [ "-", [ !Ref Env, Auth, UserProfileTable] ]
+          PointInTimeRecoverySpecification:
+            PointInTimeRecoveryEnabled: true
           BillingMode: PAY_PER_REQUEST
           AttributeDefinitions:
             -
@@ -299,6 +301,8 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
           TableName: !Join [ "-", [ !Ref Env, Auth, UserSettings] ]
+          PointInTimeRecoverySpecification:
+            PointInTimeRecoveryEnabled: true
           BillingMode: PAY_PER_REQUEST
           AttributeDefinitions:
             -
