@@ -255,7 +255,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, commons.InternalServerError)
 		return events.APIGatewayProxyResponse{StatusCode: 200, Body: commons.InternalServerError}, nil
 	}
-	anlogger.Infof(lc, "create.go : return access token for userId [%s]", userId)
+	anlogger.Infof(lc, "create.go : successfully create user and return access token for userId [%s]", userId)
 	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
 }
 
@@ -381,7 +381,7 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 		return false, commons.InternalServerError
 	}
 
-	anlogger.Infof(lc, "create.go : successfully create user userId [%s], customerId [%s], buildNum [%d], isItAndroid [%v] for request [%s]",
+	anlogger.Debugf(lc, "create.go : successfully create user userId [%s], customerId [%s], buildNum [%d], isItAndroid [%v] for request [%s]",
 		userId, customerId, buildNum, isItAndroid, req)
 
 	return true, ""
@@ -459,7 +459,7 @@ func createUserSettingsIntoDynamo(settings *apimodel.UserSettings, lc *lambdacon
 		return false, commons.InternalServerError
 	}
 
-	anlogger.Infof(lc, "create.go : successfully create default user's settings for userId [%s], settings=%v", settings.UserId, settings)
+	anlogger.Infof(lc, "create.go : successfully create default user's settings for userId [%s]", settings.UserId)
 	return true, ""
 }
 
