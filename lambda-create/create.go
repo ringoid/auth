@@ -22,6 +22,7 @@ import (
 	"github.com/satori/go.uuid"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
+	"strings"
 )
 
 var anlogger *commons.Logger
@@ -126,21 +127,25 @@ func init() {
 	anlogger.Debugf(nil, "lambda-initialization : create.go : cloudwatch client was successfully initialized")
 }
 
-func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.ALBTargetGroupResponse, error) {
 	lc, _ := lambdacontext.FromContext(ctx)
 
-	anlogger.Debugf(lc, "create.go : start handle request %v", request)
-
-	sourceIp := request.RequestContext.Identity.SourceIP
-
-	if commons.IsItWarmUpRequest(request.Body, anlogger, lc) {
-		return events.APIGatewayProxyResponse{}, nil
+	userAgent := request.Headers["user-agent"]
+	if strings.HasPrefix(userAgent, "ELB-HealthChecker") {
+		return commons.NewServiceResponse("{}"), nil
 	}
+
+	if request.HTTPMethod != "POST" {
+		return commons.NewWrongHttpMethodServiceResponse(), nil
+	}
+	sourceIp := request.Headers["x-forwarded-for"]
+
+	anlogger.Debugf(lc, "create.go : start handle request %v", request)
 
 	appVersion, isItAndroid, ok, errStr := commons.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	switch isItAndroid {
@@ -148,13 +153,13 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		if appVersion < commons.MinimalAndroidBuildNum {
 			errStr = commons.TooOldAppVersionClientError
 			anlogger.Errorf(lc, "create.go : return %s to client", errStr)
-			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+			return commons.NewServiceResponse(errStr), nil
 		}
 	default:
 		if appVersion < commons.MinimaliOSBuildNum {
 			errStr = commons.TooOldAppVersionClientError
 			anlogger.Errorf(lc, "create.go : return %s to client", errStr)
-			return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+			return commons.NewServiceResponse(errStr), nil
 
 		}
 	}
@@ -162,42 +167,42 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	reqParam, ok, errStr := parseParams(request.Body, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	userId, ok, errStr := generateUserId(sourceIp, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	sessionId, err := uuid.NewV4()
 	if err != nil {
-		strErr := commons.InternalServerError
+		errStr := commons.InternalServerError
 		anlogger.Errorf(lc, "create.go : error while generate sessionId for userId [%s] : %v", userId, err)
-		anlogger.Errorf(lc, "create.go : return %s to client", strErr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: strErr}, nil
+		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	customerId, err := uuid.NewV4()
 	if err != nil {
-		strErr := commons.InternalServerError
+		errStr := commons.InternalServerError
 		anlogger.Errorf(lc, "create.go : error while generate customerId : %v", err)
-		anlogger.Errorf(lc, "create.go : return %s to client", strErr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: strErr}, nil
+		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	ok, errStr = createUserProfile(userId, sessionId.String(), customerId.String(), appVersion, isItAndroid, reqParam, lc)
 	if !ok {
 		anlogger.Errorf(lc, "commons.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	userSettings := apimodel.NewDefaultSettings(userId, reqParam.Sex)
 	ok, errStr = createUserSettingsIntoDynamo(userSettings, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	//send analytics events
@@ -219,13 +224,13 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	ok, errStr = commons.SendCommonEvent(eventNewUser, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	ok, errStr = commons.SendCommonEvent(settingsEvent, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	//send cloudwatch metric
@@ -241,7 +246,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	if err != nil {
 		errStr = commons.InternalServerError
 		anlogger.Errorf(lc, "create.go : error sign the token for userId [%s], return %s to the client : %v", errStr, err)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	resp := apimodel.CreateResp{
@@ -253,10 +258,10 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	if err != nil {
 		anlogger.Errorf(lc, "create.go : error while marshaling resp object for userId [%s] : %v", userId, err)
 		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, commons.InternalServerError)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: commons.InternalServerError}, nil
+		return commons.NewServiceResponse(commons.InternalServerError), nil
 	}
 	anlogger.Infof(lc, "create.go : successfully create user and return access token for userId [%s]", userId)
-	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
+	return commons.NewServiceResponse(string(body)), nil
 }
 
 func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.CreateReq, bool, string) {

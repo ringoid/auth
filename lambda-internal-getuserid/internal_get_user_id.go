@@ -91,7 +91,7 @@ func handler(ctx context.Context, request commons.InternalGetUserIdReq) (commons
 
 	userId, _, userReportStatus, ok, errStr := commons.Login(request.BuildNum, request.IsItAndroid, request.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
-		anlogger.Errorf(lc, "internal_get_user_id.go : return %s to client", errStr)
+		anlogger.Debugf(lc, "internal_get_user_id.go : return %s to client", errStr)
 
 		if strings.Contains(errStr, "InvalidAccessTokenClientError") {
 			resp.ErrorCode = "InvalidAccessTokenClientError"

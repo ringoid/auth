@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/service/kinesis"
+	"strings"
 )
 
 var anlogger *commons.Logger
@@ -104,40 +105,44 @@ func init() {
 	anlogger.Debugf(nil, "lambda-initialization : get_settings.go : kinesis client was successfully initialized")
 }
 
-func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.ALBTargetGroupResponse, error) {
 	lc, _ := lambdacontext.FromContext(ctx)
 
-	anlogger.Debugf(lc, "get_settings.go : start handle request %v", request)
-
-	sourceIp := request.RequestContext.Identity.SourceIP
-
-	if commons.IsItWarmUpRequest(request.Body, anlogger, lc) {
-		return events.APIGatewayProxyResponse{}, nil
+	userAgent := request.Headers["user-agent"]
+	if strings.HasPrefix(userAgent, "ELB-HealthChecker") {
+		return commons.NewServiceResponse("{}"), nil
 	}
+
+	if request.HTTPMethod != "GET" {
+		return commons.NewWrongHttpMethodServiceResponse(), nil
+	}
+	sourceIp := request.Headers["x-forwarded-for"]
+
+	anlogger.Debugf(lc, "get_settings.go : start handle request %v", request)
 
 	appVersion, isItAndroid, ok, errStr := commons.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "get_settings.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	accessToken, ok := request.QueryStringParameters["accessToken"]
 	if !ok {
 		errStr := commons.WrongRequestParamsClientError
 		anlogger.Errorf(lc, "get_settings.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	userId, _, _, ok, errStr := commons.Login(appVersion, isItAndroid, accessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "get_settings.go : return %s to client", errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	settings, ok, errStr := getUserSettings(userId, lc)
 	if !ok {
 		anlogger.Errorf(lc, "get_settings.go : userId [%s], return %s to client", userId, errStr)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: errStr}, nil
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	resp := apimodel.GetSettingsResp{
@@ -153,10 +158,10 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	body, err := json.Marshal(resp)
 	if err != nil {
 		anlogger.Errorf(lc, "get_settings.go : error while marshaling resp object for userId [%s], resp=%v : %v", userId, resp, err)
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: commons.InternalServerError}, nil
+		return commons.NewServiceResponse(commons.InternalServerError), nil
 	}
 	anlogger.Debugf(lc, "get_settings.go : return body=%s to the client, userId [%s]", string(body), userId)
-	return events.APIGatewayProxyResponse{StatusCode: 200, Body: string(body)}, nil
+	return commons.NewServiceResponse(string(body)), nil
 }
 
 //return userSettings, ok and error string

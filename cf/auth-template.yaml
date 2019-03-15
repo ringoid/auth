@@ -19,30 +19,57 @@ Mappings:
       test: test-create-auth
       stage: stage-create-auth
       prod: prod-create-auth
+    CreateAuthFunctionTargetGroup:
+      test: test-create-auth-tg
+      stage: stage-create-auth-tg
+      prod: prod-create-auth-tg
+
     UpdateSettingsAuthFunction:
       test: test-update-settings-auth
       stage: stage-update-settings-auth
       prod: prod-update-settings-auth
+    UpdateSettingsAuthFunctionTargetGroup:
+      test: test-update-settings-auth-tg
+      stage: stage-update-settings-auth-tg
+      prod: prod-update-settings-auth-tg
+
     GetSettingsAuthFunction:
       test: test-get-settings-auth
       stage: stage-get-settings-auth
       prod: prod-get-settings-auth
+    GetSettingsAuthFunctionTargetGroup:
+      test: test-get-settings-auth-tg
+      stage: stage-get-settings-auth-tg
+      prod: prod-get-settings-auth-tg
+
     InternalGetUserIdFunction:
       test: test-internal-validate-token-auth
       stage: stage-internal-validate-token-auth
       prod: prod-internal-validate-token-auth
+
     LogoutAuthFunction:
       test: test-logout-auth
       stage: stage-logout-auth
       prod: prod-logout-auth
+    LogoutAuthFunctionTargetGroup:
+      test: test-logout-auth-tg
+      stage: stage-logout-auth-tg
+      prod: prod-logout-auth-tg
+
     InternalCleanDbAuthFunction:
       test: test-internal-clean-db-auth
       stage: stage-internal-clean-db-auth
       prod: prod-internal-clean-db-auth
+
     DeleteAuthFunction:
       test: test-delete-user-auth
       stage: stage-delete-user-auth
       prod: prod-delete-user-auth
+    DeleteAuthFunctionTargetGroup:
+      test: test-delete-user-auth-tg
+      stage: stage-delete-user-auth-tg
+      prod: prod-delete-user-auth-tg
+
     InternalStreamConsumerFunction:
       test: test-internal-stream-consumer-auth
       stage: stage-internal-stream-consumer-auth
@@ -85,7 +112,6 @@ Globals:
             INTERNAL_STREAM_NAME:
               Fn::ImportValue:
                 !Join [ "-", [ !Ref Env, InternalEventStreamExportName] ]
-            NEED_WARM_UP_LAMBDA_NAMES: !Join [ ",", [ !FindInMap [FunctionName, DeleteAuthFunction, !Ref Env], !FindInMap [FunctionName, CreateAuthFunction, !Ref Env], !FindInMap [FunctionName, UpdateSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, GetSettingsAuthFunction, !Ref Env], !FindInMap [FunctionName, InternalGetUserIdFunction, !Ref Env] ]]
             CLOUD_WATCH_NEW_USER_WAS_CREATED: !Ref CloudWatchNewUserWasCreatedMetricName
             CLOUD_WATCH_USER_DELETE_HIMSELF: !Ref CloudWatchNewUserCallDeletedMetricName
             BASE_CLOUD_WATCH_NAMESPACE: !Join [ "-", [ !Ref Env, auth, service] ]
@@ -95,23 +121,6 @@ Globals:
           Environment: !Ref Env
 
 Resources:
-
-  AuthApi:
-    Type: AWS::Serverless::Api
-    Properties:
-      Name: !Ref AWS::StackName
-      StageName: Prod
-
-  APIBasePathMapping:
-    Type: AWS::ApiGateway::BasePathMapping
-    DependsOn: AuthApiProdStage
-    Properties:
-      BasePath: auth
-      DomainName:
-        Fn::ImportValue:
-          !Join [ "-", [ !Ref Env, APIDomainNameExport] ]
-      RestApiId: !Ref AuthApi
-      Stage: Prod
 
   InternalCleanDbAuthFunction:
     Type: AWS::Serverless::Function
@@ -123,42 +132,6 @@ Resources:
       Policies:
         - AWSLambdaFullAccess
         - AmazonDynamoDBFullAccess
-
-  WarmUpFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !FindInMap [FunctionName, WarmUpFunction, !Ref Env]
-      Handler: warm_up
-      CodeUri: ../warmup-auth.zip
-      Description: WarmUp auth function
-      Policies:
-        - AWSLambdaFullAccess
-
-  ScheduledWarmUpFunctionRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Description: Scheduled WarmUp lambda function rule
-      ScheduleExpression: rate(8 minutes)
-      State: ENABLED
-      Name: !Join [ "-", [ !Ref Env, warm_up_function_rule] ]
-      Targets:
-        -
-          Arn:
-            Fn::GetAtt:
-              - WarmUpFunction
-              - Arn
-          Id: ScheduledWarmUpFunctionRuleId
-
-  PermissionForEventsToInvokeWarmUpFunction:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref WarmUpFunction
-      Action: lambda:InvokeFunction
-      Principal: events.amazonaws.com
-      SourceArn:
-        Fn::GetAtt:
-          - ScheduledWarmUpFunctionRule
-          - Arn
 
   CreateAuthFunction:
     Type: AWS::Serverless::Function
@@ -173,13 +146,31 @@ Resources:
         - SecretsManagerReadWrite
         - AmazonKinesisFullAccess
         - CloudWatchFullAccess
-      Events:
-        CompleteEvent:
-          Type: Api
-          Properties:
-            Path: /create_profile
-            Method: post
-            RestApiId: !Ref AuthApi
+
+  AuthCreateTargetGroup:
+    Type: Custom::CreateTargetGroup
+    Properties:
+      ServiceToken:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, CustomResourceFunctionExport] ]
+      CustomName: !FindInMap [FunctionName, CreateAuthFunctionTargetGroup, !Ref Env]
+      CustomTargetsId: !GetAtt CreateAuthFunction.Arn
+      TargetLambdaFunctionName: !Ref CreateAuthFunction
+
+  AuthCreateListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !GetAtt AuthCreateTargetGroup.TargetGroupArn
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "/auth/create_profile"
+      ListenerArn:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, ListenerArnExport] ]
+      Priority: 100
 
   UpdateSettingsAuthFunction:
     Type: AWS::Serverless::Function
@@ -193,13 +184,32 @@ Resources:
         - AmazonKinesisFirehoseFullAccess
         - SecretsManagerReadWrite
         - AmazonKinesisFullAccess
-      Events:
-        CompleteEvent:
-          Type: Api
-          Properties:
-            Path: /update_settings
-            Method: post
-            RestApiId: !Ref AuthApi
+
+  UpdateSettingsTargetGroup:
+    Type: Custom::CreateTargetGroup
+    Properties:
+      ServiceToken:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, CustomResourceFunctionExport] ]
+      CustomName: !FindInMap [FunctionName, UpdateSettingsAuthFunctionTargetGroup, !Ref Env]
+      CustomTargetsId: !GetAtt UpdateSettingsAuthFunction.Arn
+      TargetLambdaFunctionName: !Ref UpdateSettingsAuthFunction
+
+  UpdateSettingsListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !GetAtt UpdateSettingsTargetGroup.TargetGroupArn
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "/auth/update_settings"
+      ListenerArn:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, ListenerArnExport] ]
+      Priority: 101
+
 
   GetSettingsAuthFunction:
     Type: AWS::Serverless::Function
@@ -213,13 +223,32 @@ Resources:
         - AmazonKinesisFirehoseFullAccess
         - SecretsManagerReadWrite
         - AmazonKinesisFullAccess
-      Events:
-        CompleteEvent:
-          Type: Api
-          Properties:
-            Path: /get_settings
-            Method: get
-            RestApiId: !Ref AuthApi
+
+  GetSettingsTargetGroup:
+    Type: Custom::CreateTargetGroup
+    Properties:
+      ServiceToken:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, CustomResourceFunctionExport] ]
+      CustomName: !FindInMap [FunctionName, GetSettingsAuthFunctionTargetGroup, !Ref Env]
+      CustomTargetsId: !GetAtt GetSettingsAuthFunction.Arn
+      TargetLambdaFunctionName: !Ref GetSettingsAuthFunction
+
+  GetSettingsListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !GetAtt GetSettingsTargetGroup.TargetGroupArn
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "/auth/get_settings"
+      ListenerArn:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, ListenerArnExport] ]
+      Priority: 102
+
 
   InternalGetUserIdFunction:
     Type: AWS::Serverless::Function
@@ -246,13 +275,32 @@ Resources:
         - AmazonKinesisFirehoseFullAccess
         - AmazonKinesisFullAccess
         - CloudWatchFullAccess
-      Events:
-        StartEvent:
-          Type: Api
-          Properties:
-            Path: /delete
-            Method: post
-            RestApiId: !Ref AuthApi
+
+  DeleteTargetGroup:
+    Type: Custom::CreateTargetGroup
+    Properties:
+      ServiceToken:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, CustomResourceFunctionExport] ]
+      CustomName: !FindInMap [FunctionName, DeleteAuthFunctionTargetGroup, !Ref Env]
+      CustomTargetsId: !GetAtt DeleteAuthFunction.Arn
+      TargetLambdaFunctionName: !Ref DeleteAuthFunction
+
+  DeleteListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !GetAtt DeleteTargetGroup.TargetGroupArn
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "/auth/delete"
+      ListenerArn:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, ListenerArnExport] ]
+      Priority: 103
+
 
   InternalStreamConsumerFunction:
     Type: AWS::Serverless::Function

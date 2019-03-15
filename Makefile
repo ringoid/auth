@@ -11,8 +11,6 @@ build:
 	GOOS=linux go build lambda-update-settings/update_settings.go
 	@echo '--- Building get-settings-auth function ---'
 	GOOS=linux go build lambda-get-settings/get_settings.go
-	@echo '--- Building warm-up-auth function ---'
-	GOOS=linux go build lambda-warmup/warm_up.go
 	@echo '--- Building internal-clean-db-auth function ---'
 	GOOS=linux go build lambda-clean-db/clean.go
 	@echo '--- Building lambda-delete-user-auth function ---'
@@ -30,8 +28,6 @@ zip_lambda: build
 	zip update-settings-auth.zip ./update_settings
 	@echo '--- Zip get-settings-auth function ---'
 	zip get-settings-auth.zip ./get_settings
-	@echo '--- Zip warm-up-auth function ---'
-	zip warmup-auth.zip ./warm_up
 	@echo '--- Zip internal-clean-db-auth function ---'
 	zip clean.zip ./clean
 	@echo '--- Zip delete-user-auth function ---'
@@ -71,8 +67,6 @@ clean:
 	rm -rf update_settings
 	rm -rf get-settings-auth.zip
 	rm -rf get_settings
-	rm -rf warmup-auth.zip
-	rm -rf warm_up
 	rm -rf clean.zip
 	rm -rf clean
 	rm -rf delete.zip
