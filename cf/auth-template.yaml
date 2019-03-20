@@ -70,6 +70,15 @@ Mappings:
       stage: stage-delete-user-auth-tg
       prod: prod-delete-user-auth-tg
 
+    ClaimAuthFunction:
+      test: test-claim-auth
+      stage: stage-claim-auth
+      prod: prod-claim-auth
+    ClaimAuthFunctionTargetGroup:
+      test: test-claim-user-tg
+      stage: stage-claim-user-tg
+      prod: prod-claim-user-tg
+
     InternalStreamConsumerFunction:
       test: test-internal-stream-consumer-auth
       stage: stage-internal-stream-consumer-auth
@@ -262,44 +271,43 @@ Resources:
         - SecretsManagerReadWrite
         - AmazonKinesisFullAccess
 
-  DeleteAuthFunction:
+  ClaimAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !FindInMap [FunctionName, DeleteAuthFunction, !Ref Env]
-      Handler: delete
-      CodeUri: ../delete.zip
-      Description: Delete user auth function
+      FunctionName: !FindInMap [FunctionName, ClaimAuthFunction, !Ref Env]
+      Handler: claim
+      CodeUri: ../claim.zip
+      Description: Claim referral code auth function
       Policies:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
         - AmazonKinesisFirehoseFullAccess
         - AmazonKinesisFullAccess
-        - CloudWatchFullAccess
 
-  DeleteTargetGroup:
+  ClaimTargetGroup:
     Type: Custom::CreateTargetGroup
     Properties:
       ServiceToken:
         Fn::ImportValue:
           !Join [ "-", [ !Ref Env, CustomResourceFunctionExport] ]
-      CustomName: !FindInMap [FunctionName, DeleteAuthFunctionTargetGroup, !Ref Env]
-      CustomTargetsId: !GetAtt DeleteAuthFunction.Arn
-      TargetLambdaFunctionName: !Ref DeleteAuthFunction
+      CustomName: !FindInMap [FunctionName, ClaimAuthFunctionTargetGroup, !Ref Env]
+      CustomTargetsId: !GetAtt ClaimAuthFunction.Arn
+      TargetLambdaFunctionName: !Ref ClaimAuthFunction
 
-  DeleteListenerRule:
+  ClaimListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
       Actions:
         - Type: forward
-          TargetGroupArn: !GetAtt DeleteTargetGroup.TargetGroupArn
+          TargetGroupArn: !GetAtt ClaimTargetGroup.TargetGroupArn
       Conditions:
         - Field: path-pattern
           Values:
-            - "/auth/delete"
+            - "/auth/claim"
       ListenerArn:
         Fn::ImportValue:
           !Join [ "-", [ !Ref Env, ListenerArnExport] ]
-      Priority: 103
+      Priority: 104
 
 
   InternalStreamConsumerFunction:

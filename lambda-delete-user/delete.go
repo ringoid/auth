@@ -27,7 +27,6 @@ var userSettingsTable string
 var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 var commonStreamName string
-var internalStreamName string
 var awsKinesisClient *kinesis.Kinesis
 
 var baseCloudWatchNamespace string
@@ -101,12 +100,6 @@ func init() {
 		anlogger.Fatalf(nil, "lambda-initialization : delete.go : env can not be empty COMMON_STREAM")
 	}
 	anlogger.Debugf(nil, "lambda-initialization : delete.go : start with COMMON_STREAM = [%s]", commonStreamName)
-
-	internalStreamName, ok = os.LookupEnv("INTERNAL_STREAM_NAME")
-	if !ok {
-		anlogger.Fatalf(nil, "lambda-initialization : delete.go : env can not be empty INTERNAL_STREAM_NAME")
-	}
-	anlogger.Debugf(nil, "lambda-initialization : delete.go : start with INTERNAL_STREAM_NAME = [%s]", internalStreamName)
 
 	awsKinesisClient = kinesis.New(awsSession)
 	anlogger.Debugf(nil, "lambda-initialization : delete.go : kinesis client was successfully initialized")

@@ -16,6 +16,7 @@ type CreateReq struct {
 	DeviceModel                string `json:"deviceModel"`
 	OsVersion                  string `json:"osVersion"`
 	ReferralId                 string `json:"referralId"`
+	PrivateKey                 string `json:"privateKey"`
 }
 
 func (req CreateReq) String() string {
@@ -63,5 +64,14 @@ type DeleteReq struct {
 }
 
 func (req DeleteReq) String() string {
+	return fmt.Sprintf("%#v", req)
+}
+
+type ClaimRequest struct {
+	AccessToken string `json:"accessToken"`
+	ReferralId  string `json:"referralId"`
+}
+
+func (req ClaimRequest) String() string {
 	return fmt.Sprintf("%#v", req)
 }

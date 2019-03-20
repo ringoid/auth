@@ -212,7 +212,7 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		isItAndroid)
 	commons.SendAnalyticEvent(eventAcceptTerms, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
-	eventNewUser := commons.NewUserProfileCreatedEvent(userId, reqParam.Sex, sourceIp, reqParam.ReferralId, reqParam.YearOfBirth)
+	eventNewUser := commons.NewUserProfileCreatedEvent(userId, reqParam.Sex, sourceIp, reqParam.ReferralId, reqParam.PrivateKey, reqParam.YearOfBirth)
 	commons.SendAnalyticEvent(eventNewUser, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	settingsEvent := commons.NewUserSettingsUpdatedEvent(userId, sourceIp, userSettings.SafeDistanceInMeter,
@@ -292,6 +292,18 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Crea
 
 	if req.ReferralId == "" {
 		req.ReferralId = "n/a"
+	} else if code := commons.ReferralCodes[req.ReferralId]; !code {
+		anlogger.Errorf(lc, "create.go : unsupported referral id [%s]", req.ReferralId)
+		return nil, false, commons.WrongRequestParamsClientError
+	}
+
+	if req.PrivateKey == "" && req.ReferralId == "n/a" {
+		req.PrivateKey = "n/a"
+	}
+
+	if req.ReferralId != "n/a" && req.PrivateKey == "" {
+		anlogger.Errorf(lc, "create.go : empty private key while referral id is [%s]", req.ReferralId)
+		return nil, false, commons.WrongRequestParamsClientError
 	}
 
 	anlogger.Debugf(lc, "create.go : successfully parse request string [%s] to %v", params, req)
@@ -329,6 +341,7 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 			"#status":           aws.String(commons.UserStatusColumnName),
 			"#reportStatus":     aws.String(commons.UserReportStatusColumnName),
 			"#referralId":       aws.String(commons.ReferralIdColumnName),
+			"#privateKey":       aws.String(commons.PrivateKeyColumnName),
 		},
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":tV": {
@@ -376,6 +389,9 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 			":referralIdV": {
 				S: aws.String(req.ReferralId),
 			},
+			":privateKeyV": {
+				S: aws.String(req.PrivateKey),
+			},
 		},
 		Key: map[string]*dynamodb.AttributeValue{
 			commons.UserIdColumnName: {
@@ -384,7 +400,7 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 		},
 		ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", commons.UserIdColumnName)),
 		TableName:           aws.String(userProfileTable),
-		UpdateExpression:    aws.String("SET #token = :tV, #updatedAt = :uV, #locale = :localeV, #sex = :sV, #year = :yV, #created = :cV, #onlineTime = :onlineTimeV, #buildNum = :buildNumV, #customerId = :cIdV, #currentIsAndroid = :currentIsAndroidV, #device = :deviceV, #os = :osV, #status = :statusV, #reportStatus = :reportStatusV, #referralId = :referralIdV"),
+		UpdateExpression:    aws.String("SET #token = :tV, #updatedAt = :uV, #locale = :localeV, #sex = :sV, #year = :yV, #created = :cV, #onlineTime = :onlineTimeV, #buildNum = :buildNumV, #customerId = :cIdV, #currentIsAndroid = :currentIsAndroidV, #device = :deviceV, #os = :osV, #status = :statusV, #reportStatus = :reportStatusV, #referralId = :referralIdV, #privateKey = :privateKeyV"),
 	}
 
 	_, err := awsDbClient.UpdateItem(input)
