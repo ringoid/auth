@@ -15,6 +15,7 @@ type CreateReq struct {
 	DateTimeLegalAge           int64  `json:"dtLA"`
 	DeviceModel                string `json:"deviceModel"`
 	OsVersion                  string `json:"osVersion"`
+	ReferralId                 string `json:"referralId"`
 }
 
 func (req CreateReq) String() string {
