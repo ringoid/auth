@@ -271,6 +271,46 @@ Resources:
         - SecretsManagerReadWrite
         - AmazonKinesisFullAccess
 
+
+  DeleteAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !FindInMap [FunctionName, DeleteAuthFunction, !Ref Env]
+      Handler: delete
+      CodeUri: ../delete.zip
+      Description: Delete user auth function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - SecretsManagerReadWrite
+        - AmazonKinesisFirehoseFullAccess
+        - AmazonKinesisFullAccess
+        - CloudWatchFullAccess
+
+  DeleteTargetGroup:
+    Type: Custom::CreateTargetGroup
+    Properties:
+      ServiceToken:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, CustomResourceFunctionExport] ]
+      CustomName: !FindInMap [FunctionName, DeleteAuthFunctionTargetGroup, !Ref Env]
+      CustomTargetsId: !GetAtt DeleteAuthFunction.Arn
+      TargetLambdaFunctionName: !Ref DeleteAuthFunction
+
+  DeleteListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !GetAtt DeleteTargetGroup.TargetGroupArn
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "/auth/delete"
+      ListenerArn:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, ListenerArnExport] ]
+      Priority: 103
+
   ClaimAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
