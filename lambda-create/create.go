@@ -201,7 +201,7 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	userSettings := apimodel.NewDefaultSettings(userId, reqParam.Sex)
 	ok, errStr = createUserSettingsIntoDynamo(userSettings, lc)
 	if !ok {
-		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
+		anlogger.Errorf(lc, "create.go : userId [%s], customerId [%s], return %s to client", userId, customerId, errStr)
 		return commons.NewServiceResponse(errStr), nil
 	}
 
@@ -223,13 +223,13 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	partitionKey := userId
 	ok, errStr = commons.SendCommonEvent(eventNewUser, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
 	if !ok {
-		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
+		anlogger.Errorf(lc, "create.go : userId [%s], customerId [%s], return %s to client", userId, customerId, errStr)
 		return commons.NewServiceResponse(errStr), nil
 	}
 
 	ok, errStr = commons.SendCommonEvent(settingsEvent, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
 	if !ok {
-		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, errStr)
+		anlogger.Errorf(lc, "create.go : userId [%s], customerId [%s], return %s to client", userId, customerId, errStr)
 		return commons.NewServiceResponse(errStr), nil
 	}
 
@@ -245,7 +245,7 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	tokenToString, err := accessToken.SignedString([]byte(secretWord))
 	if err != nil {
 		errStr = commons.InternalServerError
-		anlogger.Errorf(lc, "create.go : error sign the token for userId [%s], return %s to the client : %v", errStr, err)
+		anlogger.Errorf(lc, "create.go : error sign the token for userId [%s], customerId [%s], return %s to the client : %v", userId, customerId, errStr, err)
 		return commons.NewServiceResponse(errStr), nil
 	}
 
@@ -256,11 +256,11 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 
 	body, err := json.Marshal(resp)
 	if err != nil {
-		anlogger.Errorf(lc, "create.go : error while marshaling resp object for userId [%s] : %v", userId, err)
-		anlogger.Errorf(lc, "create.go : userId [%s], return %s to client", userId, commons.InternalServerError)
+		anlogger.Errorf(lc, "create.go : error while marshaling resp object for userId [%s], customerId [%s] : %v", userId, customerId, err)
+		anlogger.Errorf(lc, "create.go : userId [%s], customerId [%s], return %s to client", userId, customerId, commons.InternalServerError)
 		return commons.NewServiceResponse(commons.InternalServerError), nil
 	}
-	anlogger.Infof(lc, "create.go : successfully create user and return access token for userId [%s]", userId)
+	anlogger.Infof(lc, "create.go : successfully create user and return access token for userId [%s], customerId [%s]", userId, customerId)
 	return commons.NewServiceResponse(string(body)), nil
 }
 
