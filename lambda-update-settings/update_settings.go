@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	basicLambda "github.com/aws/aws-lambda-go/lambda"
-	"../apimodel"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/firehose"
@@ -12,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"encoding/json"
 	"github.com/aws/aws-lambda-go/events"
-	"strconv"
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/ringoid/commons"
@@ -126,28 +124,42 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		return commons.NewServiceResponse(errStr), nil
 	}
 
-	reqParam, ok, errStr := parseParams(request.Body, lc)
+	reqParamMap, ok, errStr := parseParams(request.Body, lc)
 	if !ok {
 		anlogger.Errorf(lc, "update_settings.go : return %s to client", errStr)
 		return commons.NewServiceResponse(errStr), nil
 	}
 
-	userId, _, _, ok, errStr := commons.Login(appVersion, isItAndroid, reqParam.AccessToken, secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
+	userId, _, _, ok, errStr := commons.Login(appVersion, isItAndroid, reqParamMap["accessToken"].(string), secretWord, userProfileTable, commonStreamName, awsDbClient, awsKinesisClient, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "update_settings.go : return %s to client", errStr)
 		return commons.NewServiceResponse(errStr), nil
 	}
 
-	settings := apimodel.NewUserSettings(userId, reqParam)
-
-	ok, errStr = updateUserSettings(settings, lc)
+	ok, errStr = updateUserSettings(userId, reqParamMap, lc)
 	if !ok {
 		anlogger.Errorf(lc, "update_settings.go : userId [%s], return %s to client", userId, errStr)
 		return commons.NewServiceResponse(errStr), nil
 	}
 
-	event := commons.NewUserSettingsUpdatedEvent(userId, sourceIp, settings.SafeDistanceInMeter, settings.PushMessages, settings.PushMatches, settings.PushLikes)
-	commons.SendAnalyticEvent(event, settings.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+	localeIntr, localeOk := reqParamMap["locale"]
+	var localeStr string
+	if localeOk {
+		localeStr = localeIntr.(string)
+	}
+	pushIntr, pushOk := reqParamMap["push"]
+	var pushBool bool
+	if pushOk {
+		pushBool = pushIntr.(bool)
+	}
+	timeZoneFlt, timeZoneOk := reqParamMap["timeZone"]
+	var timeZoneInt int
+	if timeZoneOk {
+		timeZoneInt = int(timeZoneFlt.(float64))
+	}
+	event :=
+		commons.NewUserSettingsUpdatedEvent(userId, sourceIp, localeStr, localeOk, pushBool, pushOk, timeZoneInt, timeZoneOk)
+	commons.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	partitionKey := userId
 	ok, errStr = commons.SendCommonEvent(event, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
@@ -167,76 +179,136 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	return commons.NewServiceResponse(string(body)), nil
 }
 
-func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.UpdateSettingsReq, bool, string) {
+func parseParams(params string, lc *lambdacontext.LambdaContext) (map[string]interface{}, bool, string) {
 	anlogger.Debugf(lc, "update_settings.go : parse request body [%s]", params)
-	var req apimodel.UpdateSettingsReq
-	err := json.Unmarshal([]byte(params), &req)
+	var reqMap map[string]interface{}
+	err := json.Unmarshal([]byte(params), &reqMap)
 	if err != nil {
 		anlogger.Errorf(lc, "update_settings.go : error marshaling required params from the string [%s] : %v", params, err)
 		return nil, false, commons.InternalServerError
 	}
 
-	if req.AccessToken == "" {
-		anlogger.Errorf(lc, "update_settings.go : empty accessToken request param, req %v", req)
+	accessTokenInter, ok := reqMap["accessToken"]
+	if !ok {
+		anlogger.Errorf(lc, "update_settings.go : empty or nil accessToken request param, req %v", reqMap)
+		return nil, false, commons.WrongRequestParamsClientError
+	}
+	accessToken, ok := accessTokenInter.(string)
+	if !ok || accessToken == "" {
+		anlogger.Errorf(lc, "update_settings.go : wrong format or empty accessToken request param, req %v", reqMap)
 		return nil, false, commons.WrongRequestParamsClientError
 	}
 
-	if req.SafeDistanceInMeter < 0 {
-		anlogger.Errorf(lc, "update_settings.go : wrong safeDistanceInMeter [%d] request param, req %v", req.SafeDistanceInMeter, req)
-		return nil, false, commons.WrongRequestParamsClientError
+	pushIntr, ok := reqMap["push"]
+	if ok {
+		_, ok = pushIntr.(bool)
+		if !ok {
+			anlogger.Errorf(lc, "update_settings.go : error format of push in request param, req %v", reqMap)
+			return nil, false, commons.WrongRequestParamsClientError
+		}
 	}
 
-	if req.PushLikes != "NONE" && req.PushLikes != "EVERY" && req.PushLikes != "10_NEW" && req.PushLikes != "100_NEW" {
-		anlogger.Errorf(lc, "update_settings.go : wrong pushLikes [%s] request param, req %v", req.PushLikes, req)
-		return nil, false, commons.WrongRequestParamsClientError
+	timeZoneFlt, ok := reqMap["timeZone"]
+	if ok {
+		_, ok = timeZoneFlt.(float64)
+		if !ok {
+			anlogger.Errorf(lc, "update_settings.go : error format of timeZone in request param, req %v", reqMap)
+			return nil, false, commons.WrongRequestParamsClientError
+		}
 	}
 
-	anlogger.Debugf(lc, "update_settings.go : successfully parse request string [%s] to %v", params, req)
-	return &req, true, ""
+	anlogger.Debugf(lc, "update_settings.go : successfully parse request string [%s] to %v", params, reqMap)
+	return reqMap, true, ""
 }
 
 //return ok and error string
-func updateUserSettings(settings *apimodel.UserSettings, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "update_settings.go : start update user settings for userId [%s], settings=%v", settings.UserId, settings)
-	input :=
-		&dynamodb.UpdateItemInput{
-			ExpressionAttributeNames: map[string]*string{
-				"#safeDistanceInMeter": aws.String(commons.SafeDistanceInMeterColumnName),
-				"#pushMessages":        aws.String(commons.PushMessagesColumnName),
-				"#pushMatches":         aws.String(commons.PushMatchesColumnName),
-				"#pushLikes":           aws.String(commons.PushLikesColumnName),
-			},
-			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":safeDistanceInMeterV": {
-					N: aws.String(strconv.Itoa(settings.SafeDistanceInMeter)),
-				},
-				":pushMessagesV": {
-					BOOL: aws.Bool(settings.PushMessages),
-				},
-				":pushMatchesV": {
-					BOOL: aws.Bool(settings.PushMatches),
-				},
-				":pushLikesV": {
-					S: aws.String(settings.PushLikes),
-				},
-			},
-			Key: map[string]*dynamodb.AttributeValue{
-				commons.UserIdColumnName: {
-					S: aws.String(settings.UserId),
-				},
-			},
+func updateUserSettings(userId string, mapSettings map[string]interface{}, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "update_settings.go : start update user settings for userId [%s], settings=%v", userId, mapSettings)
 
-			TableName:        aws.String(userSettingsTable),
-			UpdateExpression: aws.String("SET #safeDistanceInMeter = :safeDistanceInMeterV, #pushMessages = :pushMessagesV, #pushMatches = :pushMatchesV, #pushLikes = :pushLikesV"),
+	for key, value := range mapSettings {
+		if key == "locale" {
+			input :=
+				&dynamodb.UpdateItemInput{
+					ExpressionAttributeNames: map[string]*string{
+						"#locale": aws.String(commons.LocaleColumnName),
+					},
+					ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+						":localeV": {
+							S: aws.String(value.(string)),
+						},
+					},
+					Key: map[string]*dynamodb.AttributeValue{
+						commons.UserIdColumnName: {
+							S: aws.String(userId),
+						},
+					},
+
+					TableName:        aws.String(userSettingsTable),
+					UpdateExpression: aws.String("SET #locale = :localeV"),
+				}
+
+			_, err := awsDbClient.UpdateItem(input)
+			if err != nil {
+				anlogger.Errorf(lc, "update_settings.go : error update user locale settings for userId [%s], settings=%v : %v", userId, mapSettings, err)
+				return false, commons.InternalServerError
+			}
+		} else if key == "timeZone" {
+			input :=
+				&dynamodb.UpdateItemInput{
+					ExpressionAttributeNames: map[string]*string{
+						"#timeZone": aws.String(commons.TimeZoneColumnName),
+					},
+					ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+						":timeZoneV": {
+							N: aws.String(fmt.Sprintf("%v", value.(float64))),
+						},
+					},
+					Key: map[string]*dynamodb.AttributeValue{
+						commons.UserIdColumnName: {
+							S: aws.String(userId),
+						},
+					},
+
+					TableName:        aws.String(userSettingsTable),
+					UpdateExpression: aws.String("SET #timeZone = :timeZoneV"),
+				}
+
+			_, err := awsDbClient.UpdateItem(input)
+			if err != nil {
+				anlogger.Errorf(lc, "update_settings.go : error update user timeZone settings for userId [%s], settings=%v : %v", userId, mapSettings, err)
+				return false, commons.InternalServerError
+			}
+		} else if key == "push" {
+			//we already checked that we can convert to bool in parse param
+			input :=
+				&dynamodb.UpdateItemInput{
+					ExpressionAttributeNames: map[string]*string{
+						"#push": aws.String(commons.PushColumnName),
+					},
+					ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+						":pushV": {
+							BOOL: aws.Bool(value.(bool)),
+						},
+					},
+					Key: map[string]*dynamodb.AttributeValue{
+						commons.UserIdColumnName: {
+							S: aws.String(userId),
+						},
+					},
+
+					TableName:        aws.String(userSettingsTable),
+					UpdateExpression: aws.String("SET #push = :pushV"),
+				}
+
+			_, err := awsDbClient.UpdateItem(input)
+			if err != nil {
+				anlogger.Errorf(lc, "update_settings.go : error update user push settings for userId [%s], settings=%v : %v", userId, mapSettings, err)
+				return false, commons.InternalServerError
+			}
 		}
+	} //end for
 
-	_, err := awsDbClient.UpdateItem(input)
-	if err != nil {
-		anlogger.Errorf(lc, "update_settings.go : error update user settings for userId [%s], settings=%v : %v", settings.UserId, settings, err)
-		return false, commons.InternalServerError
-	}
-
-	anlogger.Infof(lc, "update_settings.go : successfully update user settings for userId [%s], settings=%v", settings.UserId, settings)
+	anlogger.Infof(lc, "update_settings.go : successfully update user settings for userId [%s], settings=%v", userId, mapSettings)
 	return true, ""
 }
 

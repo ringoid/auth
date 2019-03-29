@@ -198,15 +198,15 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		return commons.NewServiceResponse(errStr), nil
 	}
 
-	userSettings := apimodel.NewDefaultSettings(userId, reqParam.Sex)
-	ok, errStr = createUserSettingsIntoDynamo(userSettings, lc)
+	userSettings := apimodel.NewSettings(reqParam)
+	ok, errStr = createUserSettingsIntoDynamo(userId, userSettings, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : userId [%s], customerId [%s], return %s to client", userId, customerId, errStr)
 		return commons.NewServiceResponse(errStr), nil
 	}
 
 	//send analytics events
-	eventAcceptTerms := commons.NewUserAcceptTermsEvent(userId, customerId.String(), reqParam.Locale, sourceIp,
+	eventAcceptTerms := commons.NewUserAcceptTermsEvent(userId, customerId.String(), sourceIp,
 		reqParam.DeviceModel, reqParam.OsVersion,
 		reqParam.DateTimeLegalAge, reqParam.DateTimePrivacyNotes, reqParam.DateTimeTermsAndConditions,
 		isItAndroid)
@@ -215,9 +215,8 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	eventNewUser := commons.NewUserProfileCreatedEvent(userId, reqParam.Sex, sourceIp, reqParam.ReferralId, reqParam.PrivateKey, reqParam.YearOfBirth)
 	commons.SendAnalyticEvent(eventNewUser, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
-	settingsEvent := commons.NewUserSettingsUpdatedEvent(userId, sourceIp, userSettings.SafeDistanceInMeter,
-		userSettings.PushMessages, userSettings.PushMatches, userSettings.PushLikes)
-	commons.SendAnalyticEvent(settingsEvent, userSettings.UserId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+	settingsEvent := commons.NewUserSettingsUpdatedEvent(userId, sourceIp, userSettings.Locale, true, userSettings.Push, true, userSettings.TimeZone, true)
+	commons.SendAnalyticEvent(settingsEvent, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	//send common events
 	partitionKey := userId
@@ -260,7 +259,8 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		anlogger.Errorf(lc, "create.go : userId [%s], customerId [%s], return %s to client", userId, customerId, commons.InternalServerError)
 		return commons.NewServiceResponse(commons.InternalServerError), nil
 	}
-	anlogger.Infof(lc, "create.go : successfully create user and return access token for userId [%s], customerId [%s]", userId, customerId)
+	anlogger.Infof(lc, "create.go : successfully create user and return access token for userId [%s], customerId [%s], sex [%s]",
+		userId, customerId, reqParam.Sex)
 	return commons.NewServiceResponse(string(body)), nil
 }
 
@@ -284,7 +284,7 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Crea
 	}
 
 	if req.DateTimeTermsAndConditions <= 0 ||
-		req.DateTimePrivacyNotes <= 0 || req.DateTimeLegalAge <= 0 || req.Locale == "" ||
+		req.DateTimePrivacyNotes <= 0 || req.DateTimeLegalAge <= 0 ||
 		req.DeviceModel == "" || req.OsVersion == "" {
 		anlogger.Errorf(lc, "create.go : one of the required param is nil, req %v", req)
 		return nil, false, commons.WrongRequestParamsClientError
@@ -328,7 +328,6 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 		ExpressionAttributeNames: map[string]*string{
 			"#token":            aws.String(commons.SessionTokenColumnName),
 			"#updatedAt":        aws.String(commons.TokenUpdatedTimeColumnName),
-			"#locale":           aws.String(commons.LocaleColumnName),
 			"#sex":              aws.String(commons.SexColumnName),
 			"#year":             aws.String(commons.YearOfBirthColumnName),
 			"#created":          aws.String(commons.ProfileCreatedAt),
@@ -349,9 +348,6 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 			},
 			":uV": {
 				S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
-			},
-			":localeV": {
-				S: aws.String(req.Locale),
 			},
 			":sV": {
 				S: aws.String(req.Sex),
@@ -400,7 +396,7 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 		},
 		ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", commons.UserIdColumnName)),
 		TableName:           aws.String(userProfileTable),
-		UpdateExpression:    aws.String("SET #token = :tV, #updatedAt = :uV, #locale = :localeV, #sex = :sV, #year = :yV, #created = :cV, #onlineTime = :onlineTimeV, #buildNum = :buildNumV, #customerId = :cIdV, #currentIsAndroid = :currentIsAndroidV, #device = :deviceV, #os = :osV, #status = :statusV, #reportStatus = :reportStatusV, #referralId = :referralIdV, #privateKey = :privateKeyV"),
+		UpdateExpression:    aws.String("SET #token = :tV, #updatedAt = :uV, #sex = :sV, #year = :yV, #created = :cV, #onlineTime = :onlineTimeV, #buildNum = :buildNumV, #customerId = :cIdV, #currentIsAndroid = :currentIsAndroidV, #device = :deviceV, #os = :osV, #status = :statusV, #reportStatus = :reportStatusV, #referralId = :referralIdV, #privateKey = :privateKeyV"),
 	}
 
 	_, err := awsDbClient.UpdateItem(input)
@@ -441,38 +437,34 @@ func generateUserId(base string, lc *lambdacontext.LambdaContext) (string, bool,
 }
 
 //return ok and error string
-func createUserSettingsIntoDynamo(settings *apimodel.UserSettings, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "create.go : create default user settings for userId [%s], settings=%v", settings.UserId, settings)
+func createUserSettingsIntoDynamo(userId string, settings *apimodel.Settings, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "create.go : create default user settings for userId [%s], settings=%v", userId, settings)
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
-				"#safeDistanceInMeter": aws.String(commons.SafeDistanceInMeterColumnName),
-				"#pushMessages":        aws.String(commons.PushMessagesColumnName),
-				"#pushMatches":         aws.String(commons.PushMatchesColumnName),
-				"#pushLikes":           aws.String(commons.PushLikesColumnName),
+				"#locale":   aws.String(commons.LocaleColumnName),
+				"#push":     aws.String(commons.PushColumnName),
+				"#timeZone": aws.String(commons.TimeZoneColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":safeDistanceInMeterV": {
-					N: aws.String(strconv.Itoa(settings.SafeDistanceInMeter)),
+				":localeV": {
+					S: aws.String(settings.Locale),
 				},
-				":pushMessagesV": {
-					BOOL: aws.Bool(settings.PushMessages),
+				":pushV": {
+					BOOL: aws.Bool(settings.Push),
 				},
-				":pushMatchesV": {
-					BOOL: aws.Bool(settings.PushMatches),
-				},
-				":pushLikesV": {
-					S: aws.String(settings.PushLikes),
+				":timeZoneV": {
+					N: aws.String(strconv.Itoa(settings.TimeZone)),
 				},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
 				commons.UserIdColumnName: {
-					S: aws.String(settings.UserId),
+					S: aws.String(userId),
 				},
 			},
 			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", commons.UserIdColumnName)),
 			TableName:           aws.String(userSettingsTable),
-			UpdateExpression:    aws.String("SET #safeDistanceInMeter = :safeDistanceInMeterV, #pushMessages = :pushMessagesV, #pushMatches = :pushMatchesV, #pushLikes = :pushLikesV"),
+			UpdateExpression:    aws.String("SET #locale = :localeV, #push = :pushV, #timeZone = :timeZoneV"),
 		}
 
 	_, err := awsDbClient.UpdateItem(input)
@@ -480,15 +472,15 @@ func createUserSettingsIntoDynamo(settings *apimodel.UserSettings, lc *lambdacon
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case dynamodb.ErrCodeConditionalCheckFailedException:
-				anlogger.Warnf(lc, "create.go : warning, default settings for userId [%s] already exist", settings.UserId)
+				anlogger.Warnf(lc, "create.go : warning, default settings for userId [%s] already exist", userId)
 				return true, ""
 			}
 		}
-		anlogger.Errorf(lc, "create.go : error while creating default settings for userId [%s], settings=%v : %v", settings.UserId, settings, err)
+		anlogger.Errorf(lc, "create.go : error while creating default settings for userId [%s], settings=%v : %v", userId, settings, err)
 		return false, commons.InternalServerError
 	}
 
-	anlogger.Infof(lc, "create.go : successfully create default user's settings for userId [%s]", settings.UserId)
+	anlogger.Infof(lc, "create.go : successfully create default user's settings for userId [%s]", userId)
 	return true, ""
 }
 

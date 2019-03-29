@@ -6,17 +6,16 @@ import (
 )
 
 type CreateReq struct {
-	WarmUpRequest              bool   `json:"warmUpRequest"`
-	YearOfBirth                int    `json:"yearOfBirth"`
-	Sex                        string `json:"sex"`
-	Locale                     string `json:"locale"`
-	DateTimeTermsAndConditions int64  `json:"dtTC"`
-	DateTimePrivacyNotes       int64  `json:"dtPN"`
-	DateTimeLegalAge           int64  `json:"dtLA"`
-	DeviceModel                string `json:"deviceModel"`
-	OsVersion                  string `json:"osVersion"`
-	ReferralId                 string `json:"referralId"`
-	PrivateKey                 string `json:"privateKey"`
+	YearOfBirth                int      `json:"yearOfBirth"`
+	Sex                        string   `json:"sex"`
+	DateTimeTermsAndConditions int64    `json:"dtTC"`
+	DateTimePrivacyNotes       int64    `json:"dtPN"`
+	DateTimeLegalAge           int64    `json:"dtLA"`
+	DeviceModel                string   `json:"deviceModel"`
+	OsVersion                  string   `json:"osVersion"`
+	ReferralId                 string   `json:"referralId"`
+	PrivateKey                 string   `json:"privateKey"`
+	AppSettings                Settings `json:"settings"`
 }
 
 func (req CreateReq) String() string {
@@ -29,32 +28,17 @@ type CreateResp struct {
 	CustomerId  string `json:"customerId"`
 }
 
-func (resp CreateResp) String() string {
+type Settings struct {
+	Locale   string `json:"locale"`
+	Push     bool   `json:"push"`
+	TimeZone int    `json:"timeZone"`
+}
+
+func (resp Settings) String() string {
 	return fmt.Sprintf("%#v", resp)
 }
 
-type UpdateSettingsReq struct {
-	WarmUpRequest       bool   `json:"warmUpRequest"`
-	AccessToken         string `json:"accessToken"`
-	SafeDistanceInMeter int    `json:"safeDistanceInMeter"` // 0 (default for men) || 10 (default for women)
-	PushMessages        bool   `json:"pushMessages"`        // true (default for men) || false (default for women)
-	PushMatches         bool   `json:"pushMatches"`         // true (default)
-	PushLikes           string `json:"pushLikes"`           //EVERY (default for men) || 10_NEW (default for women) || 100_NEW || NONE
-}
-
-func (req UpdateSettingsReq) String() string {
-	return fmt.Sprintf("%#v", req)
-}
-
-type GetSettingsResp struct {
-	commons.BaseResponse
-	SafeDistanceInMeter int    `json:"safeDistanceInMeter"` // 0 (default for men) || 25 (default for women)
-	PushMessages        bool   `json:"pushMessages"`        // true (default for men) || false (default for women)
-	PushMatches         bool   `json:"pushMatches"`         // true (default)
-	PushLikes           string `json:"pushLikes"`           //EVERY (default for men) || 10_NEW (default for women) || 100_NEW || NONE
-}
-
-func (resp GetSettingsResp) String() string {
+func (resp CreateResp) String() string {
 	return fmt.Sprintf("%#v", resp)
 }
 

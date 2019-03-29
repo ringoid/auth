@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/ringoid/commons"
 	"strings"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 )
 
 var anlogger *commons.Logger
@@ -184,6 +185,16 @@ func claim(userId, code string, lc *lambdacontext.LambdaContext) (bool, string) 
 
 	_, err := awsDbClient.UpdateItem(input)
 	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case dynamodb.ErrCodeConditionalCheckFailedException:
+				anlogger.Warnf(lc, "create.go : warning, try to claim with existing referral for userId [%s]", userId)
+				return true, ""
+			default:
+				anlogger.Errorf(lc, "claim.go : error claim code [%s] for userId [%s] : %v", code, userId, aerr)
+				return false, commons.InternalServerError
+			}
+		}
 		anlogger.Errorf(lc, "claim.go : error claim code [%s] for userId [%s] : %v", code, userId, err)
 		return false, commons.InternalServerError
 	}

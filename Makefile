@@ -9,8 +9,6 @@ build:
 	GOOS=linux go build lambda-internal-getuserid/internal_get_user_id.go
 	@echo '--- Building update-settings-auth function ---'
 	GOOS=linux go build lambda-update-settings/update_settings.go
-	@echo '--- Building get-settings-auth function ---'
-	GOOS=linux go build lambda-get-settings/get_settings.go
 	@echo '--- Building internal-clean-db-auth function ---'
 	GOOS=linux go build lambda-clean-db/clean.go
 	@echo '--- Building lambda-delete-user-auth function ---'
@@ -28,8 +26,6 @@ zip_lambda: build
 	zip internal-getuserid-auth.zip ./internal_get_user_id
 	@echo '--- Zip update-settings-auth function ---'
 	zip update-settings-auth.zip ./update_settings
-	@echo '--- Zip get-settings-auth function ---'
-	zip get-settings-auth.zip ./get_settings
 	@echo '--- Zip internal-clean-db-auth function ---'
 	zip clean.zip ./clean
 	@echo '--- Zip delete-user-auth function ---'
@@ -69,8 +65,6 @@ clean:
 	rm -rf internal-getuserid-auth.zip
 	rm -rf update-settings-auth.zip
 	rm -rf update_settings
-	rm -rf get-settings-auth.zip
-	rm -rf get_settings
 	rm -rf clean.zip
 	rm -rf clean
 	rm -rf delete.zip

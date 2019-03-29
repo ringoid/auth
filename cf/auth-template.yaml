@@ -33,15 +33,6 @@ Mappings:
       stage: stage-update-settings-auth-tg
       prod: prod-update-settings-auth-tg
 
-    GetSettingsAuthFunction:
-      test: test-get-settings-auth
-      stage: stage-get-settings-auth
-      prod: prod-get-settings-auth
-    GetSettingsAuthFunctionTargetGroup:
-      test: test-get-settings-auth-tg
-      stage: stage-get-settings-auth-tg
-      prod: prod-get-settings-auth-tg
-
     InternalGetUserIdFunction:
       test: test-internal-validate-token-auth
       stage: stage-internal-validate-token-auth
@@ -219,46 +210,6 @@ Resources:
           !Join [ "-", [ !Ref Env, ListenerArnExport] ]
       Priority: 101
 
-
-  GetSettingsAuthFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !FindInMap [FunctionName, GetSettingsAuthFunction, !Ref Env]
-      Handler: get_settings
-      CodeUri: ../get-settings-auth.zip
-      Description: Get user's settings function
-      Policies:
-        - AmazonDynamoDBFullAccess
-        - AmazonKinesisFirehoseFullAccess
-        - SecretsManagerReadWrite
-        - AmazonKinesisFullAccess
-
-  GetSettingsTargetGroup:
-    Type: Custom::CreateTargetGroup
-    Properties:
-      ServiceToken:
-        Fn::ImportValue:
-          !Join [ "-", [ !Ref Env, CustomResourceFunctionExport] ]
-      CustomName: !FindInMap [FunctionName, GetSettingsAuthFunctionTargetGroup, !Ref Env]
-      CustomTargetsId: !GetAtt GetSettingsAuthFunction.Arn
-      TargetLambdaFunctionName: !Ref GetSettingsAuthFunction
-
-  GetSettingsListenerRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Properties:
-      Actions:
-        - Type: forward
-          TargetGroupArn: !GetAtt GetSettingsTargetGroup.TargetGroupArn
-      Conditions:
-        - Field: path-pattern
-          Values:
-            - "/auth/get_settings"
-      ListenerArn:
-        Fn::ImportValue:
-          !Join [ "-", [ !Ref Env, ListenerArnExport] ]
-      Priority: 102
-
-
   InternalGetUserIdFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -270,7 +221,6 @@ Resources:
         - AmazonDynamoDBFullAccess
         - SecretsManagerReadWrite
         - AmazonKinesisFullAccess
-
 
   DeleteAuthFunction:
     Type: AWS::Serverless::Function
