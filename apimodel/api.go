@@ -5,6 +5,10 @@ import (
 	"github.com/ringoid/commons"
 )
 
+const (
+	MaxReferralCodeLength = 16
+)
+
 type CreateReq struct {
 	YearOfBirth                int      `json:"yearOfBirth"`
 	Sex                        string   `json:"sex"`

@@ -290,10 +290,13 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Crea
 		return nil, false, commons.WrongRequestParamsClientError
 	}
 
+	req.ReferralId = strings.TrimSpace(req.ReferralId)
+	req.ReferralId = strings.ToLower(req.ReferralId)
+
 	if req.ReferralId == "" {
 		req.ReferralId = "n/a"
-	} else if code := commons.ReferralCodes[req.ReferralId]; !code {
-		anlogger.Errorf(lc, "create.go : unsupported referral id [%s]", req.ReferralId)
+	} else if len([]rune(req.ReferralId)) > apimodel.MaxReferralCodeLength {
+		anlogger.Errorf(lc, "create.go : too big referral id [%s]", req.ReferralId)
 		return nil, false, commons.WrongRequestParamsClientError
 	}
 
