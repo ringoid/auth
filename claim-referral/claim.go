@@ -129,20 +129,23 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	}
 
 	ok, errStr = claim(userId, reqParam.ReferralId, lc)
-	if !ok {
+	if !ok && len(errStr) != 0 {
 		anlogger.Errorf(lc, "claim.go : return %s to client", errStr)
 		return commons.NewServiceResponse(errStr), nil
 	}
 
-	event := commons.NewUserClaimReferralCodeEvent(userId, sourceIp, reqParam.ReferralId)
-	commons.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+	if ok {
+		event := commons.NewUserClaimReferralCodeEvent(userId, sourceIp, reqParam.ReferralId)
+		commons.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
-	//send common events for neo4j
-	partitionKey := userId
-	ok, errStr = commons.SendCommonEvent(event, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
-	if !ok {
-		anlogger.Errorf(lc, "claim.go : userId [%s], return %s to client", userId, errStr)
-		return commons.NewServiceResponse(errStr), nil
+		//send common events for neo4j
+		partitionKey := userId
+		ok, errStr = commons.SendCommonEvent(event, userId, commonStreamName, partitionKey, awsKinesisClient, anlogger, lc)
+		if !ok {
+			anlogger.Errorf(lc, "claim.go : userId [%s], return %s to client", userId, errStr)
+			return commons.NewServiceResponse(errStr), nil
+		}
+		anlogger.Infof(lc, "claim.go : successfully claim code [%s] for userId [%s]", reqParam.ReferralId, userId)
 	}
 
 	resp := commons.BaseResponse{}
@@ -154,7 +157,6 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	}
 	anlogger.Debugf(lc, "claim.go : return body=%s to client, userId [%s]", string(body), userId)
 
-	anlogger.Infof(lc, "claim.go : successfully claim code [%s] for userId [%s]", reqParam.ReferralId, userId)
 	return commons.NewServiceResponse(string(body)), nil
 }
 
@@ -189,7 +191,7 @@ func claim(userId, code string, lc *lambdacontext.LambdaContext) (bool, string) 
 			switch aerr.Code() {
 			case dynamodb.ErrCodeConditionalCheckFailedException:
 				anlogger.Warnf(lc, "create.go : warning, try to claim with existing referral for userId [%s]", userId)
-				return true, ""
+				return false, ""
 			default:
 				anlogger.Errorf(lc, "claim.go : error claim code [%s] for userId [%s] : %v", code, userId, aerr)
 				return false, commons.InternalServerError

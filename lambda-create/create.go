@@ -199,6 +199,11 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	}
 
 	userSettings := apimodel.NewSettings(reqParam)
+	if userSettings.TimeZone < -12 || userSettings.TimeZone > 14 {
+		anlogger.Errorf(lc, "create.go : wrong timezone [%d], return %s to client", userSettings.TimeZone, commons.WrongRequestParamsClientError)
+		return commons.NewServiceResponse(commons.WrongRequestParamsClientError), nil
+	}
+
 	ok, errStr = createUserSettingsIntoDynamo(userId, userSettings, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : userId [%s], customerId [%s], return %s to client", userId, customerId, errStr)
