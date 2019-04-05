@@ -190,7 +190,7 @@ func claim(userId, code string, lc *lambdacontext.LambdaContext) (bool, string) 
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case dynamodb.ErrCodeConditionalCheckFailedException:
-				anlogger.Warnf(lc, "create.go : warning, try to claim with existing referral for userId [%s]", userId)
+				anlogger.Warnf(lc, "claim.go : warning, try to claim with existing referral for userId [%s]", userId)
 				return false, ""
 			default:
 				anlogger.Errorf(lc, "claim.go : error claim code [%s] for userId [%s] : %v", code, userId, aerr)
