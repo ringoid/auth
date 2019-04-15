@@ -278,7 +278,7 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Crea
 		return nil, false, commons.InternalServerError
 	}
 
-	if req.YearOfBirth < time.Now().UTC().Year()-150 || req.YearOfBirth > time.Now().UTC().Year()-18 {
+	if req.YearOfBirth < time.Now().UTC().Year()-150 {
 		anlogger.Errorf(lc, "create.go : wrong year of birth [%d] request param, req %v", req.YearOfBirth, req)
 		return nil, false, commons.WrongYearOfBirthClientError
 	}
