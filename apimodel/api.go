@@ -33,9 +33,12 @@ type CreateResp struct {
 }
 
 type Settings struct {
-	Locale   string `json:"locale"`
-	Push     bool   `json:"push"`
-	TimeZone int    `json:"timeZone"`
+	Locale         string `json:"locale"`
+	Push           bool   `json:"push"`
+	PushNewLike    bool   `json:"pushNewLike"`
+	PushNewMessage bool   `json:"pushNewMessage"`
+	PushNewMatch   bool   `json:"pushNewMatch"`
+	TimeZone       int    `json:"timeZone"`
 }
 
 func (resp Settings) String() string {

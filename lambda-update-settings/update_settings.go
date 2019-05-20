@@ -152,13 +152,35 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	if pushOk {
 		pushBool = pushIntr.(bool)
 	}
+
+	pushNewLikeIntr, pushNewLikeOk := reqParamMap["pushNewLike"]
+	var pushNewLikeBool bool
+	if pushNewLikeOk {
+		pushNewLikeBool = pushNewLikeIntr.(bool)
+	}
+
+	pushNewMessageIntr, pushNewMessageOk := reqParamMap["pushNewMessage"]
+	var pushNewMessageBool bool
+	if pushNewMessageOk {
+		pushNewMessageBool = pushNewMessageIntr.(bool)
+	}
+
+	pushNewMatchIntr, pushNewMatchOk := reqParamMap["pushNewMatch"]
+	var pushNewMatchBool bool
+	if pushNewMatchOk {
+		pushNewMatchBool = pushNewMatchIntr.(bool)
+	}
+
 	timeZoneFlt, timeZoneOk := reqParamMap["timeZone"]
 	var timeZoneInt int
 	if timeZoneOk {
 		timeZoneInt = int(timeZoneFlt.(float64))
 	}
 	event :=
-		commons.NewUserSettingsUpdatedEvent(userId, sourceIp, localeStr, localeOk, pushBool, pushOk, timeZoneInt, timeZoneOk)
+		commons.NewUserSettingsUpdatedEvent(userId, sourceIp, localeStr, localeOk,
+			pushBool, pushNewLikeBool, pushNewMatchBool, pushNewMessageBool,
+			pushOk, pushNewLikeOk, pushNewMatchOk, pushNewMessageOk,
+			timeZoneInt, timeZoneOk)
 	commons.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	partitionKey := userId
@@ -208,6 +230,33 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (map[string]int
 		}
 	}
 
+	pushNewLikeIntr, ok := reqMap["pushNewLike"]
+	if ok {
+		_, ok = pushNewLikeIntr.(bool)
+		if !ok {
+			anlogger.Errorf(lc, "update_settings.go : error format of pushNewLike in request param, req %v", reqMap)
+			return nil, false, commons.WrongRequestParamsClientError
+		}
+	}
+
+	pushNewMatchIntr, ok := reqMap["pushNewMatch"]
+	if ok {
+		_, ok = pushNewMatchIntr.(bool)
+		if !ok {
+			anlogger.Errorf(lc, "update_settings.go : error format of pushNewMatch in request param, req %v", reqMap)
+			return nil, false, commons.WrongRequestParamsClientError
+		}
+	}
+
+	pushNewMessageIntr, ok := reqMap["pushNewMessage"]
+	if ok {
+		_, ok = pushNewMessageIntr.(bool)
+		if !ok {
+			anlogger.Errorf(lc, "update_settings.go : error format of pushNewMessage in request param, req %v", reqMap)
+			return nil, false, commons.WrongRequestParamsClientError
+		}
+	}
+
 	timeZoneFlt, ok := reqMap["timeZone"]
 	if ok {
 		_, ok = timeZoneFlt.(float64)
@@ -226,6 +275,7 @@ func updateUserSettings(userId string, mapSettings map[string]interface{}, lc *l
 	anlogger.Debugf(lc, "update_settings.go : start update user settings for userId [%s], settings=%v", userId, mapSettings)
 
 	for key, value := range mapSettings {
+		anlogger.Debugf(lc, "update_settings.go : update key [%v], value [%v]", key, value)
 		if key == "locale" {
 			input :=
 				&dynamodb.UpdateItemInput{
@@ -303,6 +353,87 @@ func updateUserSettings(userId string, mapSettings map[string]interface{}, lc *l
 			_, err := awsDbClient.UpdateItem(input)
 			if err != nil {
 				anlogger.Errorf(lc, "update_settings.go : error update user push settings for userId [%s], settings=%v : %v", userId, mapSettings, err)
+				return false, commons.InternalServerError
+			}
+		} else if key == "pushNewLike" {
+			//we already checked that we can convert to bool in parse param
+			input :=
+				&dynamodb.UpdateItemInput{
+					ExpressionAttributeNames: map[string]*string{
+						"#pushNewLike": aws.String(commons.PushNewLikeColumnName),
+					},
+					ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+						":pushNewLikeV": {
+							BOOL: aws.Bool(value.(bool)),
+						},
+					},
+					Key: map[string]*dynamodb.AttributeValue{
+						commons.UserIdColumnName: {
+							S: aws.String(userId),
+						},
+					},
+
+					TableName:        aws.String(userSettingsTable),
+					UpdateExpression: aws.String("SET #pushNewLike = :pushNewLikeV"),
+				}
+
+			_, err := awsDbClient.UpdateItem(input)
+			if err != nil {
+				anlogger.Errorf(lc, "update_settings.go : error update user pushNewLike settings for userId [%s], settings=%v : %v", userId, mapSettings, err)
+				return false, commons.InternalServerError
+			}
+		} else if key == "pushNewMatch" {
+			//we already checked that we can convert to bool in parse param
+			input :=
+				&dynamodb.UpdateItemInput{
+					ExpressionAttributeNames: map[string]*string{
+						"#pushNewMatch": aws.String(commons.PushNewMatchColumnName),
+					},
+					ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+						":pushNewMatchV": {
+							BOOL: aws.Bool(value.(bool)),
+						},
+					},
+					Key: map[string]*dynamodb.AttributeValue{
+						commons.UserIdColumnName: {
+							S: aws.String(userId),
+						},
+					},
+
+					TableName:        aws.String(userSettingsTable),
+					UpdateExpression: aws.String("SET #pushNewMatch = :pushNewMatchV"),
+				}
+
+			_, err := awsDbClient.UpdateItem(input)
+			if err != nil {
+				anlogger.Errorf(lc, "update_settings.go : error update user pushNewMatch settings for userId [%s], settings=%v : %v", userId, mapSettings, err)
+				return false, commons.InternalServerError
+			}
+		} else if key == "pushNewMessage" {
+			//we already checked that we can convert to bool in parse param
+			input :=
+				&dynamodb.UpdateItemInput{
+					ExpressionAttributeNames: map[string]*string{
+						"#pushNewMessage": aws.String(commons.PushNewMessageColumnName),
+					},
+					ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+						":pushNewMessageV": {
+							BOOL: aws.Bool(value.(bool)),
+						},
+					},
+					Key: map[string]*dynamodb.AttributeValue{
+						commons.UserIdColumnName: {
+							S: aws.String(userId),
+						},
+					},
+
+					TableName:        aws.String(userSettingsTable),
+					UpdateExpression: aws.String("SET #pushNewMessage = :pushNewMessageV"),
+				}
+
+			_, err := awsDbClient.UpdateItem(input)
+			if err != nil {
+				anlogger.Errorf(lc, "update_settings.go : error update user pushNewMessage settings for userId [%s], settings=%v : %v", userId, mapSettings, err)
 				return false, commons.InternalServerError
 			}
 		}

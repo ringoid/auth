@@ -220,7 +220,10 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	eventNewUser := commons.NewUserProfileCreatedEvent(userId, reqParam.Sex, sourceIp, reqParam.ReferralId, reqParam.PrivateKey, reqParam.YearOfBirth)
 	commons.SendAnalyticEvent(eventNewUser, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
-	settingsEvent := commons.NewUserSettingsUpdatedEvent(userId, sourceIp, userSettings.Locale, true, userSettings.Push, true, userSettings.TimeZone, true)
+	settingsEvent := commons.NewUserSettingsUpdatedEvent(userId, sourceIp, userSettings.Locale, true,
+		userSettings.Push, userSettings.PushNewLike, userSettings.PushNewMatch, userSettings.PushNewMessage,
+		true, true, true, true,
+		userSettings.TimeZone, true)
 	commons.SendAnalyticEvent(settingsEvent, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	//send common events
@@ -450,9 +453,12 @@ func createUserSettingsIntoDynamo(userId string, settings *apimodel.Settings, lc
 	input :=
 		&dynamodb.UpdateItemInput{
 			ExpressionAttributeNames: map[string]*string{
-				"#locale":   aws.String(commons.LocaleColumnName),
-				"#push":     aws.String(commons.PushColumnName),
-				"#timeZone": aws.String(commons.TimeZoneColumnName),
+				"#locale":         aws.String(commons.LocaleColumnName),
+				"#push":           aws.String(commons.PushColumnName),
+				"#pushNewLike":    aws.String(commons.PushNewLikeColumnName),
+				"#pushNewMatch":   aws.String(commons.PushNewMatchColumnName),
+				"#pushNewMessage": aws.String(commons.PushNewMessageColumnName),
+				"#timeZone":       aws.String(commons.TimeZoneColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":localeV": {
@@ -460,6 +466,15 @@ func createUserSettingsIntoDynamo(userId string, settings *apimodel.Settings, lc
 				},
 				":pushV": {
 					BOOL: aws.Bool(settings.Push),
+				},
+				":pushNewLikeV": {
+					BOOL: aws.Bool(settings.PushNewLike),
+				},
+				":pushNewMatchV": {
+					BOOL: aws.Bool(settings.PushNewMatch),
+				},
+				":pushNewMessageV": {
+					BOOL: aws.Bool(settings.PushNewMessage),
 				},
 				":timeZoneV": {
 					N: aws.String(strconv.Itoa(settings.TimeZone)),
@@ -472,7 +487,7 @@ func createUserSettingsIntoDynamo(userId string, settings *apimodel.Settings, lc
 			},
 			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", commons.UserIdColumnName)),
 			TableName:           aws.String(userSettingsTable),
-			UpdateExpression:    aws.String("SET #locale = :localeV, #push = :pushV, #timeZone = :timeZoneV"),
+			UpdateExpression:    aws.String("SET #locale = :localeV, #push = :pushV, #timeZone = :timeZoneV, #pushNewLike = :pushNewLikeV, #pushNewMatch = :pushNewMatchV, #pushNewMessage = :pushNewMessageV"),
 		}
 
 	_, err := awsDbClient.UpdateItem(input)
