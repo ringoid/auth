@@ -66,3 +66,15 @@ type ClaimRequest struct {
 func (req ClaimRequest) String() string {
 	return fmt.Sprintf("%#v", req)
 }
+
+type UpdateProfileRequest struct {
+	AccessToken string `json:"accessToken"`
+	Property    int    `json:"property"`
+	Transport   int    `json:"transport"`
+	Income      int    `json:"income"`
+	Height      int    `json:"height"`
+}
+
+func (req UpdateProfileRequest) String() string {
+	return fmt.Sprintf("%#v", req)
+}

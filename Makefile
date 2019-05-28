@@ -17,6 +17,8 @@ build:
 	GOOS=linux go build lambda-handle-stream/handle_stream.go lambda-handle-stream/block.go
 	@echo '--- Building claim-referral function ---'
 	GOOS=linux go build claim-referral/claim.go
+	@echo '--- Building update-profile-auth function ---'
+	GOOS=linux go build lambda-update-profile/update_profile.go
 
 
 zip_lambda: build
@@ -34,6 +36,8 @@ zip_lambda: build
 	zip handle_stream.zip ./handle_stream
 	@echo '--- Zip claim-referral function ---'
 	zip claim.zip ./claim
+	@echo '--- Zip update-profile-auth function ---'
+	zip update_profile.zip ./update_profile
 
 test-deploy: zip_lambda
 	@echo '--- Build lambda test ---'
@@ -73,4 +77,6 @@ clean:
 	rm -rf handle_stream.zip
 	rm -rf claim
 	rm -rf claim.zip
+	rm -rf update_profile.zip
+	rm -rf update_profile
 

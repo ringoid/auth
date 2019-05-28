@@ -75,6 +75,16 @@ Mappings:
       stage: stage-internal-stream-consumer-auth
       prod: prod-internal-stream-consumer-auth
 
+    UpdateProfileAuthFunction:
+      test: test-update-profile-auth
+      stage: stage-update-profile-auth
+      prod: prod-update-profile-auth
+    UpdateProfileAuthFunctionTargetGroup:
+      test: test-update-profile-auth-tg
+      stage: stage-update-profile-auth-tg
+      prod: prod-update-profile-auth-tg
+
+
 Parameters:
   Env:
     Type: String
@@ -299,6 +309,43 @@ Resources:
           !Join [ "-", [ !Ref Env, ListenerArnExport] ]
       Priority: 104
 
+  UpdateProfileAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !FindInMap [FunctionName, UpdateProfileAuthFunction, !Ref Env]
+      Handler: update_profile
+      CodeUri: ../update_profile.zip
+      Description: Update user's profile function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - AmazonKinesisFirehoseFullAccess
+        - SecretsManagerReadWrite
+        - AmazonKinesisFullAccess
+
+  UpdateProfileTargetGroup:
+    Type: Custom::CreateTargetGroup
+    Properties:
+      ServiceToken:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, CustomResourceFunctionExport] ]
+      CustomName: !FindInMap [FunctionName, UpdateProfileAuthFunctionTargetGroup, !Ref Env]
+      CustomTargetsId: !GetAtt UpdateProfileAuthFunction.Arn
+      TargetLambdaFunctionName: !Ref UpdateProfileAuthFunction
+
+  UpdateProfileListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !GetAtt UpdateProfileTargetGroup.TargetGroupArn
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "/auth/update_profile"
+      ListenerArn:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, ListenerArnExport] ]
+      Priority: 105
 
   InternalStreamConsumerFunction:
     Type: AWS::Serverless::Function
