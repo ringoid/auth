@@ -73,6 +73,8 @@ type UpdateProfileRequest struct {
 	Transport   int    `json:"transport"`
 	Income      int    `json:"income"`
 	Height      int    `json:"height"`
+	Education   int    `json:"educationLevel"`
+	HairColor   int    `json:"hairColor"`
 }
 
 func (req UpdateProfileRequest) String() string {

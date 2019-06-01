@@ -135,7 +135,7 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		return commons.NewServiceResponse(errStr), nil
 	}
 
-	event := commons.NewUserProfileUpdatedEvent(userId, sourceIp, reqParam.Property, reqParam.Transport, reqParam.Income, reqParam.Height)
+	event := commons.NewUserProfileUpdatedEvent(userId, sourceIp, reqParam.Property, reqParam.Transport, reqParam.Income, reqParam.Height, reqParam.Education, reqParam.HairColor)
 	commons.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	partitionKey := userId
@@ -185,12 +185,16 @@ func updateUserProfile(userId, userProfileTableName string, req *apimodel.Update
 				"#transport": aws.String(commons.UserProfileTransportColumnName),
 				"#income":    aws.String(commons.UserProfileIncomeColumnName),
 				"#height":    aws.String(commons.UserProfileHeightColumnName),
+				"#edu":       aws.String(commons.UserProfileEducationLevelColumnName),
+				"#hair":      aws.String(commons.UserProfileHairColorColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 				":propertyV":  {N: aws.String(fmt.Sprintf("%v", req.Property))},
 				":transportV": {N: aws.String(fmt.Sprintf("%v", req.Transport))},
 				":incomeV":    {N: aws.String(fmt.Sprintf("%v", req.Income))},
 				":heightV":    {N: aws.String(fmt.Sprintf("%v", req.Height))},
+				":eduV":       {N: aws.String(fmt.Sprintf("%v", req.Education))},
+				":hairV":      {N: aws.String(fmt.Sprintf("%v", req.HairColor))},
 			},
 			Key: map[string]*dynamodb.AttributeValue{
 				commons.UserIdColumnName: {
@@ -198,7 +202,7 @@ func updateUserProfile(userId, userProfileTableName string, req *apimodel.Update
 				},
 			},
 			TableName:        aws.String(userProfileTableName),
-			UpdateExpression: aws.String("SET #property = :propertyV, #transport = :transportV, #income = :incomeV, #height = :heightV"),
+			UpdateExpression: aws.String("SET #property = :propertyV, #transport = :transportV, #income = :incomeV, #height = :heightV, #edu = :eduV, #hair = :hairV"),
 		}
 
 	_, err := awsDbClient.UpdateItem(input)
