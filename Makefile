@@ -19,6 +19,14 @@ build:
 	GOOS=linux go build claim-referral/claim.go
 	@echo '--- Building update-profile-auth function ---'
 	GOOS=linux go build lambda-update-profile/update_profile.go
+	@echo '--- Building login-with-email-auth function ---'
+	GOOS=linux go build login-with-email/login_with_email.go
+	@echo '--- Building verify-email-auth function ---'
+	GOOS=linux go build verify-email/verify_email.go
+	@echo '--- Building change-email-auth function ---'
+	GOOS=linux go build change-email/change_email.go
+	@echo '--- Building get-profile-auth function ---'
+	GOOS=linux go build get-profile/get_profile.go
 
 
 zip_lambda: build
@@ -38,6 +46,14 @@ zip_lambda: build
 	zip claim.zip ./claim
 	@echo '--- Zip update-profile-auth function ---'
 	zip update_profile.zip ./update_profile
+	@echo '--- Zip login-with-email-auth function ---'
+	zip login_with_email.zip ./login_with_email
+	@echo '--- Zip verify-email-auth function ---'
+	zip verify_email.zip ./verify_email
+	@echo '--- Zip change-email-auth function ---'
+	zip change_email.zip ./change_email
+	@echo '--- Zip get-profile-auth function ---'
+	zip get_profile.zip ./get_profile
 
 test-deploy: zip_lambda
 	@echo '--- Build lambda test ---'
@@ -79,4 +95,12 @@ clean:
 	rm -rf claim.zip
 	rm -rf update_profile.zip
 	rm -rf update_profile
+	rm -rf login_with_email
+	rm -rf login_with_email.zip
+	rm -rf verify_email
+	rm -rf verify_email.zip
+	rm -rf change_email
+	rm -rf change_email.zip
+	rm -rf get_profile
+	rm -rf get_profile.zip
 

@@ -84,6 +84,41 @@ Mappings:
       stage: stage-update-profile-auth-tg
       prod: prod-update-profile-auth-tg
 
+    LoginWithEmailAuthFunction:
+      test: test-login-with-email-auth
+      stage: stage-login-with-email-auth
+      prod: prod-login-with-email-auth
+    LoginWithEmailAuthFunctionTargetGroup:
+      test: test-login-with-email-auth-tg
+      stage: stage-login-with-email-auth-tg
+      prod: prod-login-with-email-auth-tg
+
+    VerifyEmailAuthFunction:
+      test: test-verify-email-auth
+      stage: stage-verify-email-auth
+      prod: prod-verify-email-auth
+    VerifyEmailAuthFunctionTargetGroup:
+      test: test-verify-email-auth-tg
+      stage: stage-verify-email-auth-tg
+      prod: prod-verify-email-auth-tg
+
+    ChangeEmailAuthFunction:
+      test: test-change-email-auth
+      stage: stage-change-email-auth
+      prod: prod-change-email-auth
+    ChangeEmailAuthFunctionTargetGroup:
+      test: test-change-email-auth-tg
+      stage: stage-change-email-auth-tg
+      prod: prod-change-email-auth-tg
+
+    GetProfileAuthFunction:
+      test: test-get-profile-auth
+      stage: stage-get-profile-auth
+      prod: prod-get-profile-auth
+    GetProfileAuthFunctionTargetGroup:
+      test: test-get-profile-auth
+      stage: stage-get-profile-auth
+      prod: prod-get-profile-auth
 
 Parameters:
   Env:
@@ -346,6 +381,154 @@ Resources:
         Fn::ImportValue:
           !Join [ "-", [ !Ref Env, ListenerArnExport] ]
       Priority: 105
+
+  LoginWithEmailAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !FindInMap [FunctionName, LoginWithEmailAuthFunction, !Ref Env]
+      Handler: login_with_email
+      CodeUri: ../login_with_email.zip
+      Description: Login with email function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - AmazonKinesisFirehoseFullAccess
+
+  LoginWithEmailAuthFunctionTargetGroup:
+    Type: Custom::CreateTargetGroup
+    Properties:
+      ServiceToken:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, CustomResourceFunctionExport] ]
+      CustomName: !FindInMap [FunctionName, LoginWithEmailAuthFunctionTargetGroup, !Ref Env]
+      CustomTargetsId: !GetAtt LoginWithEmailAuthFunction.Arn
+      TargetLambdaFunctionName: !Ref LoginWithEmailAuthFunction
+
+  LoginWithEmailAuthFunctionListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !GetAtt LoginWithEmailAuthFunctionTargetGroup.TargetGroupArn
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "/auth/login_with_email"
+      ListenerArn:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, ListenerArnExport] ]
+      Priority: 106
+
+  VerifyEmailAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !FindInMap [FunctionName, VerifyEmailAuthFunction, !Ref Env]
+      Handler: verify_email
+      CodeUri: ../verify_email.zip
+      Description: Verify email function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - AmazonKinesisFirehoseFullAccess
+
+  VerifyEmailAuthFunctionTargetGroup:
+    Type: Custom::CreateTargetGroup
+    Properties:
+      ServiceToken:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, CustomResourceFunctionExport] ]
+      CustomName: !FindInMap [FunctionName, VerifyEmailAuthFunctionTargetGroup, !Ref Env]
+      CustomTargetsId: !GetAtt VerifyEmailAuthFunction.Arn
+      TargetLambdaFunctionName: !Ref VerifyEmailAuthFunction
+
+  VerifyEmailAuthFunctionListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !GetAtt VerifyEmailAuthFunctionTargetGroup.TargetGroupArn
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "/auth/verify_email"
+      ListenerArn:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, ListenerArnExport] ]
+      Priority: 107
+
+  ChangeEmailAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !FindInMap [FunctionName, ChangeEmailAuthFunction, !Ref Env]
+      Handler: change_email
+      CodeUri: ../change_email.zip
+      Description: Change email function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - AmazonKinesisFirehoseFullAccess
+        - SecretsManagerReadWrite
+        - AmazonKinesisFullAccess
+
+  ChangeEmailAuthFunctionTargetGroup:
+    Type: Custom::CreateTargetGroup
+    Properties:
+      ServiceToken:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, CustomResourceFunctionExport] ]
+      CustomName: !FindInMap [FunctionName, ChangeEmailAuthFunctionTargetGroup, !Ref Env]
+      CustomTargetsId: !GetAtt ChangeEmailAuthFunction.Arn
+      TargetLambdaFunctionName: !Ref ChangeEmailAuthFunction
+
+  ChangeEmailAuthFunctionListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !GetAtt ChangeEmailAuthFunctionTargetGroup.TargetGroupArn
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "/auth/change_email"
+      ListenerArn:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, ListenerArnExport] ]
+      Priority: 108
+
+  GetProfileAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !FindInMap [FunctionName, GetProfileAuthFunction, !Ref Env]
+      Handler: get_profile
+      CodeUri: ../get_profile.zip
+      Description: Get profile function
+      Policies:
+        - AmazonDynamoDBFullAccess
+        - AmazonKinesisFirehoseFullAccess
+        - SecretsManagerReadWrite
+        - AmazonKinesisFullAccess
+
+  GetProfileAuthFunctionTargetGroup:
+    Type: Custom::CreateTargetGroup
+    Properties:
+      ServiceToken:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, CustomResourceFunctionExport] ]
+      CustomName: !FindInMap [FunctionName, GetProfileAuthFunctionTargetGroup, !Ref Env]
+      CustomTargetsId: !GetAtt GetProfileAuthFunction.Arn
+      TargetLambdaFunctionName: !Ref GetProfileAuthFunction
+
+  GetProfileAuthFunctionListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !GetAtt GetProfileAuthFunctionTargetGroup.TargetGroupArn
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "/auth/get_profile"
+      ListenerArn:
+        Fn::ImportValue:
+          !Join [ "-", [ !Ref Env, ListenerArnExport] ]
+      Priority: 109
 
   InternalStreamConsumerFunction:
     Type: AWS::Serverless::Function

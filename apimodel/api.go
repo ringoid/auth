@@ -81,3 +81,78 @@ type UpdateProfileRequest struct {
 func (req UpdateProfileRequest) String() string {
 	return fmt.Sprintf("%#v", req)
 }
+
+type LoginWithEmailRequest struct {
+	Email string `json:"email"`
+}
+
+func (req LoginWithEmailRequest) String() string {
+	return fmt.Sprintf("%#v", req)
+}
+
+type LoginWithEmailResponse struct {
+	commons.BaseResponse
+	AuthSessionId string `json:"authSessionId"`
+}
+
+func (req LoginWithEmailResponse) String() string {
+	return fmt.Sprintf("%#v", req)
+}
+
+type VerifyEmailRequest struct {
+	AuthSessionId string `json:"authSessionId"`
+	Email         string `json:"email"`
+	PinCode       string `json:"pinCode"`
+}
+
+func (req VerifyEmailRequest) String() string {
+	return fmt.Sprintf("%#v", req)
+}
+
+type VerifyEmailResponse struct {
+	commons.BaseResponse
+	AccessToken string `json:"accessToken"`
+}
+
+func (req VerifyEmailResponse) String() string {
+	return fmt.Sprintf("%#v", req)
+}
+
+type ChangeEmailRequest struct {
+	AccessToken string `json:"accessToken"`
+	NewEmail    string `json:"newEmail"`
+}
+
+func (req ChangeEmailRequest) String() string {
+	return fmt.Sprintf("%#v", req)
+}
+
+type ChangeEmailResponse struct {
+	commons.BaseResponse
+	AuthSessionId string `json:"authSessionId,omitempty"`
+}
+
+func (req ChangeEmailResponse) String() string {
+	return fmt.Sprintf("%#v", req)
+}
+
+type GetProfileResponse struct {
+	commons.BaseResponse
+	CustomerId     string `json:"customerId"`
+	LastOnlineText string `json:"lastOnlineText"`
+	LastOnlineFlag string `json:"lastOnlineFlag"`
+	DistanceText   string `json:"distanceText"`
+	Age            int    `json:"age"`
+	Sex            string `json:"sex"`
+	Property       int    `json:"property"`
+	Transport      int    `json:"transport"`
+	Income         int    `json:"income"`
+	Height         int    `json:"height"`
+	EducationLevel int    `json:"educationLevel"`
+	HairColor      int    `json:"hairColor"`
+	Children       int    `json:"children"`
+}
+
+func (req GetProfileResponse) String() string {
+	return fmt.Sprintf("%#v", req)
+}
