@@ -142,7 +142,7 @@ type GetProfileResponse struct {
 	LastOnlineText string `json:"lastOnlineText"`
 	LastOnlineFlag string `json:"lastOnlineFlag"`
 	DistanceText   string `json:"distanceText"`
-	Age            int    `json:"age"`
+	YearOfBirth    int    `json:"yearOfBirth"`
 	Sex            string `json:"sex"`
 	Property       int    `json:"property"`
 	Transport      int    `json:"transport"`
