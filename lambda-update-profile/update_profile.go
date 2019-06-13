@@ -135,7 +135,10 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		return commons.NewServiceResponse(errStr), nil
 	}
 
-	event := commons.NewUserProfileUpdatedEvent(userId, sourceIp, reqParam.Property, reqParam.Transport, reqParam.Income, reqParam.Height, reqParam.Education, reqParam.HairColor, reqParam.Children)
+	event := commons.NewUserProfileUpdatedEvent(userId, sourceIp, reqParam.Property, reqParam.Transport, reqParam.Income,
+		reqParam.Height, reqParam.Education, reqParam.HairColor, reqParam.Children,
+		reqParam.Name, reqParam.JobTitle, reqParam.Company, reqParam.EducationText, reqParam.About, reqParam.Instagram,
+		reqParam.TikTok, reqParam.WhereLive, reqParam.WhereFrom)
 	commons.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	partitionKey := userId
@@ -177,34 +180,109 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Upda
 //return ok and error string
 func updateUserProfile(userId, userProfileTableName string, req *apimodel.UpdateProfileRequest, lc *lambdacontext.LambdaContext) (bool, string) {
 	anlogger.Debugf(lc, "update_profile.go : start update user profile for userId [%s], profile=%v", userId, req)
+	expressionAttrNames := map[string]*string{
+		"#property":  aws.String(commons.UserProfilePropertyColumnName),
+		"#transport": aws.String(commons.UserProfileTransportColumnName),
+		"#income":    aws.String(commons.UserProfileIncomeColumnName),
+		"#height":    aws.String(commons.UserProfileHeightColumnName),
+		"#edu":       aws.String(commons.UserProfileEducationLevelColumnName),
+		"#hair":      aws.String(commons.UserProfileHairColorColumnName),
+		"#children":  aws.String(commons.UserProfileChildrenColumnName),
+	}
+	expressionAttributeValues := map[string]*dynamodb.AttributeValue{
+		":propertyV":  {N: aws.String(fmt.Sprintf("%v", req.Property))},
+		":transportV": {N: aws.String(fmt.Sprintf("%v", req.Transport))},
+		":incomeV":    {N: aws.String(fmt.Sprintf("%v", req.Income))},
+		":heightV":    {N: aws.String(fmt.Sprintf("%v", req.Height))},
+		":eduV":       {N: aws.String(fmt.Sprintf("%v", req.Education))},
+		":hairV":      {N: aws.String(fmt.Sprintf("%v", req.HairColor))},
+		":childrenV":  {N: aws.String(fmt.Sprintf("%v", req.Children))},
+	}
+	updateExp := "SET #property = :propertyV, #transport = :transportV, #income = :incomeV, #height = :heightV, #edu = :eduV, #hair = :hairV, #children = :childrenV"
+
+	if len(req.Name) != 0 {
+		expressionAttrNames["#name"] = aws.String(commons.UserProfileNameColumnName)
+		expressionAttributeValues[":nameV"] = &dynamodb.AttributeValue{
+			S: aws.String(req.Name),
+		}
+		updateExp += ", #name = :nameV"
+	}
+
+	if len(req.JobTitle) != 0 {
+		expressionAttrNames["#jobTitle"] = aws.String(commons.UserProfileJobTitleColumnName)
+		expressionAttributeValues[":jobTitleV"] = &dynamodb.AttributeValue{
+			S: aws.String(req.JobTitle),
+		}
+		updateExp += ", #jobTitle = :jobTitleV"
+	}
+
+	if len(req.Company) != 0 {
+		expressionAttrNames["#company"] = aws.String(commons.UserProfileCompanyColumnName)
+		expressionAttributeValues[":companyV"] = &dynamodb.AttributeValue{
+			S: aws.String(req.Company),
+		}
+		updateExp += ", #company = :companyV"
+	}
+
+	if len(req.EducationText) != 0 {
+		expressionAttrNames["#educationText"] = aws.String(commons.UserProfileEducationTextColumnName)
+		expressionAttributeValues[":educationTextV"] = &dynamodb.AttributeValue{
+			S: aws.String(req.EducationText),
+		}
+		updateExp += ", #educationText = :educationTextV"
+	}
+
+	if len(req.About) != 0 {
+		expressionAttrNames["#about"] = aws.String(commons.UserProfileAboutColumnName)
+		expressionAttributeValues[":aboutV"] = &dynamodb.AttributeValue{
+			S: aws.String(req.About),
+		}
+		updateExp += ", #about = :aboutV"
+	}
+
+	if len(req.Instagram) != 0 {
+		expressionAttrNames["#instagram"] = aws.String(commons.UserProfileInstagramColumnName)
+		expressionAttributeValues[":instagramV"] = &dynamodb.AttributeValue{
+			S: aws.String(req.Instagram),
+		}
+		updateExp += ", #instagram = :instagramV"
+	}
+
+	if len(req.TikTok) != 0 {
+		expressionAttrNames["#tiktok"] = aws.String(commons.UserProfileTikTokColumnName)
+		expressionAttributeValues[":tiktokV"] = &dynamodb.AttributeValue{
+			S: aws.String(req.TikTok),
+		}
+		updateExp += ", #tiktok = :tiktokV"
+	}
+
+	if len(req.WhereLive) != 0 {
+		expressionAttrNames["#wherelive"] = aws.String(commons.UserProfileWhereILiveColumnName)
+		expressionAttributeValues[":whereliveV"] = &dynamodb.AttributeValue{
+			S: aws.String(req.WhereLive),
+		}
+		updateExp += ", #wherelive = :whereliveV"
+	}
+
+	if len(req.WhereFrom) != 0 {
+		expressionAttrNames["#whereFrom"] = aws.String(commons.UserProfileWhereIFromColumnName)
+		expressionAttributeValues[":whereFromV"] = &dynamodb.AttributeValue{
+			S: aws.String(req.WhereFrom),
+		}
+		updateExp += ", #whereFrom = :whereFromV"
+	}
 
 	input :=
 		&dynamodb.UpdateItemInput{
-			ExpressionAttributeNames: map[string]*string{
-				"#property":  aws.String(commons.UserProfilePropertyColumnName),
-				"#transport": aws.String(commons.UserProfileTransportColumnName),
-				"#income":    aws.String(commons.UserProfileIncomeColumnName),
-				"#height":    aws.String(commons.UserProfileHeightColumnName),
-				"#edu":       aws.String(commons.UserProfileEducationLevelColumnName),
-				"#hair":      aws.String(commons.UserProfileHairColorColumnName),
-				"#children":  aws.String(commons.UserProfileChildrenColumnName),
-			},
-			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":propertyV":  {N: aws.String(fmt.Sprintf("%v", req.Property))},
-				":transportV": {N: aws.String(fmt.Sprintf("%v", req.Transport))},
-				":incomeV":    {N: aws.String(fmt.Sprintf("%v", req.Income))},
-				":heightV":    {N: aws.String(fmt.Sprintf("%v", req.Height))},
-				":eduV":       {N: aws.String(fmt.Sprintf("%v", req.Education))},
-				":hairV":      {N: aws.String(fmt.Sprintf("%v", req.HairColor))},
-				":childrenV":  {N: aws.String(fmt.Sprintf("%v", req.Children))},
-			},
+			ExpressionAttributeNames:  expressionAttrNames,
+			ExpressionAttributeValues: expressionAttributeValues,
 			Key: map[string]*dynamodb.AttributeValue{
 				commons.UserIdColumnName: {
 					S: aws.String(userId),
 				},
 			},
 			TableName:        aws.String(userProfileTableName),
-			UpdateExpression: aws.String("SET #property = :propertyV, #transport = :transportV, #income = :incomeV, #height = :heightV, #edu = :eduV, #hair = :hairV, #children = :childrenV"),
+			UpdateExpression: aws.String(updateExp),
 		}
 
 	_, err := awsDbClient.UpdateItem(input)

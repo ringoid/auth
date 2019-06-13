@@ -68,14 +68,23 @@ func (req ClaimRequest) String() string {
 }
 
 type UpdateProfileRequest struct {
-	AccessToken string `json:"accessToken"`
-	Property    int    `json:"property"`
-	Transport   int    `json:"transport"`
-	Income      int    `json:"income"`
-	Height      int    `json:"height"`
-	Education   int    `json:"educationLevel"`
-	HairColor   int    `json:"hairColor"`
-	Children    int    `json:"children"`
+	AccessToken   string `json:"accessToken"`
+	Property      int    `json:"property"`
+	Transport     int    `json:"transport"`
+	Income        int    `json:"income"`
+	Height        int    `json:"height"`
+	Education     int    `json:"educationLevel"`
+	HairColor     int    `json:"hairColor"`
+	Children      int    `json:"children"`
+	Name          string `json:"name"`
+	JobTitle      string `json:"jobTitle"`
+	Company       string `json:"company"`
+	EducationText string `json:"education"`
+	About         string `json:"about"`
+	Instagram     string `json:"instagram"`
+	TikTok        string `json:"tikTok"`
+	WhereLive     string `json:"whereLive"`
+	WhereFrom     string `json:"whereFrom"`
 }
 
 func (req UpdateProfileRequest) String() string {
