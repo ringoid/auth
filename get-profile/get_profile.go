@@ -16,6 +16,7 @@ import (
 	"strings"
 	"../apimodel"
 	"github.com/aws/aws-sdk-go/service/kinesis"
+	"strconv"
 )
 
 var anlogger *commons.Logger
@@ -134,7 +135,11 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 
 	anlogger.Debugf(lc, "get_profile.go : debug print %v %v %v %v", sourceIp, appVersion, isItAndroid, userId)
 
-	resp := apimodel.GetProfileResponse{}
+	resp, ok, errStr := getUserProfile(userId, userProfileTable, lc)
+	if !ok {
+		anlogger.Errorf(lc, "get_profile.go : return %s to client", errStr)
+		return commons.NewServiceResponse(errStr), nil
+	}
 
 	body, err := json.Marshal(resp)
 	if err != nil {
@@ -146,47 +151,183 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	return commons.NewServiceResponse(string(body)), nil
 }
 
-//return ok and error string
-func updateUserProfile(userId, userProfileTableName string, req *apimodel.UpdateProfileRequest, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "get_profile.go : start update user profile for userId [%s], profile=%v", userId, req)
+//return profile, ok and error string
+func getUserProfile(userId, userProfileTableName string, lc *lambdacontext.LambdaContext) (*apimodel.GetProfileResponse, bool, string) {
+	anlogger.Debugf(lc, "get_profile.go : start fetch user profile for userId [%s]", userId)
 
-	input :=
-		&dynamodb.UpdateItemInput{
-			ExpressionAttributeNames: map[string]*string{
-				"#property":  aws.String(commons.UserProfilePropertyColumnName),
-				"#transport": aws.String(commons.UserProfileTransportColumnName),
-				"#income":    aws.String(commons.UserProfileIncomeColumnName),
-				"#height":    aws.String(commons.UserProfileHeightColumnName),
-				"#edu":       aws.String(commons.UserProfileEducationLevelColumnName),
-				"#hair":      aws.String(commons.UserProfileHairColorColumnName),
-				"#children":  aws.String(commons.UserProfileChildrenColumnName),
+	input := &dynamodb.GetItemInput{
+		Key: map[string]*dynamodb.AttributeValue{
+			commons.UserIdColumnName: {
+				S: aws.String(userId),
 			},
-			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":propertyV":  {N: aws.String(fmt.Sprintf("%v", req.Property))},
-				":transportV": {N: aws.String(fmt.Sprintf("%v", req.Transport))},
-				":incomeV":    {N: aws.String(fmt.Sprintf("%v", req.Income))},
-				":heightV":    {N: aws.String(fmt.Sprintf("%v", req.Height))},
-				":eduV":       {N: aws.String(fmt.Sprintf("%v", req.Education))},
-				":hairV":      {N: aws.String(fmt.Sprintf("%v", req.HairColor))},
-				":childrenV":  {N: aws.String(fmt.Sprintf("%v", req.Children))},
-			},
-			Key: map[string]*dynamodb.AttributeValue{
-				commons.UserIdColumnName: {
-					S: aws.String(userId),
-				},
-			},
-			TableName:        aws.String(userProfileTableName),
-			UpdateExpression: aws.String("SET #property = :propertyV, #transport = :transportV, #income = :incomeV, #height = :heightV, #edu = :eduV, #hair = :hairV, #children = :childrenV"),
-		}
-
-	_, err := awsDbClient.UpdateItem(input)
-	if err != nil {
-		anlogger.Errorf(lc, "get_profile.go : error update user profile for userId [%s], profile=%v : %v", userId, req, err)
-		return false, commons.InternalServerError
+		},
+		TableName:      aws.String(userProfileTableName),
+		ConsistentRead: aws.Bool(true),
 	}
 
-	anlogger.Infof(lc, "get_profile.go : successfully update user profile for userId [%s], settings=%v", userId, req)
-	return true, ""
+	result, err := awsDbClient.GetItem(input)
+	if err != nil {
+		anlogger.Errorf(lc, "get_profile.go : error get user profile for userId [%s] : %v", userId, err)
+		return nil, false, commons.InternalServerError
+	}
+
+	if len(result.Item) == 0 {
+		anlogger.Errorf(lc, "get_profile.go : there is no user profile for userId [%s]", userId)
+		return nil, false, commons.InternalServerError
+	}
+
+	profile := apimodel.GetProfileResponse{}
+
+	customerId, ok, errStr := getStringValueProfileProperty(userId, commons.CustomerIdColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.CustomerId = customerId
+
+	yearOfBirth, ok, errStr := getIntValueProfileProperty(userId, commons.YearOfBirthColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.YearOfBirth = yearOfBirth
+
+	sex, ok, errStr := getStringValueProfileProperty(userId, commons.SexColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.Sex = sex
+
+	profile.LastOnlineText = "Online"
+	profile.LastOnlineFlag = "online"
+	profile.DistanceText = "unknown"
+
+	property, ok, errStr := getIntValueProfileProperty(userId, commons.UserProfilePropertyColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.Property = property
+
+	transport, ok, errStr := getIntValueProfileProperty(userId, commons.UserProfileTransportColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.Transport = transport
+
+	income, ok, errStr := getIntValueProfileProperty(userId, commons.UserProfileIncomeColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.Income = income
+
+	height, ok, errStr := getIntValueProfileProperty(userId, commons.UserProfileHeightColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.Height = height
+
+	educationLevel, ok, errStr := getIntValueProfileProperty(userId, commons.UserProfileEducationLevelColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.EducationLevel = educationLevel
+
+	hairColor, ok, errStr := getIntValueProfileProperty(userId, commons.UserProfileHairColorColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.HairColor = hairColor
+
+	children, ok, errStr := getIntValueProfileProperty(userId, commons.UserProfileChildrenColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.Children = children
+
+	name, ok, errStr := getStringValueProfileProperty(userId, commons.UserProfileNameColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.Name = name
+
+	jobTitle, ok, errStr := getStringValueProfileProperty(userId, commons.UserProfileJobTitleColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.JobTitle = jobTitle
+
+	company, ok, errStr := getStringValueProfileProperty(userId, commons.UserProfileCompanyColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.Company = company
+
+	eduText, ok, errStr := getStringValueProfileProperty(userId, commons.UserProfileEducationTextColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.EducationText = eduText
+
+	about, ok, errStr := getStringValueProfileProperty(userId, commons.UserProfileAboutColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.About = about
+
+	instagram, ok, errStr := getStringValueProfileProperty(userId, commons.UserProfileInstagramColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.Instagram = instagram
+
+	tiktok, ok, errStr := getStringValueProfileProperty(userId, commons.UserProfileTikTokColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.TikTok = tiktok
+
+	wIlive, ok, errStr := getStringValueProfileProperty(userId, commons.UserProfileWhereILiveColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.WhereLive = wIlive
+
+	wIFrom, ok, errStr := getStringValueProfileProperty(userId, commons.UserProfileWhereIFromColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.WhereFrom = wIFrom
+
+	anlogger.Debugf(lc, "get_profile.go : successfully get user profile [%v] for userId [%s]", profile, userId)
+
+	anlogger.Infof(lc, "get_profile.go : successfully get user profile for userId [%s]", userId)
+	return &profile, true, ""
+}
+
+//return int value, ok and error string
+func getIntValueProfileProperty(userId, propertyName string, result *dynamodb.GetItemOutput, lc *lambdacontext.LambdaContext) (int, bool, string) {
+	profilePropertyP, ok := result.Item[propertyName]
+	if ok {
+		if profilePropertyP.N != nil {
+			intV, err := strconv.Atoi(*profilePropertyP.N)
+			if err != nil {
+				anlogger.Errorf(lc, "get_profile.go : can not convert [%s] to int property (name is [%s]) for userId [%s]",
+					*profilePropertyP.N, propertyName, userId)
+				return -1, false, commons.InternalServerError
+			}
+			return intV, true, ""
+		}
+	}
+	return 0, true, ""
+}
+
+//return string value, ok and error string
+func getStringValueProfileProperty(userId, propertyName string, result *dynamodb.GetItemOutput, lc *lambdacontext.LambdaContext) (string, bool, string) {
+	profilePropertyP, ok := result.Item[propertyName]
+	if ok {
+		if profilePropertyP.S != nil {
+			return *profilePropertyP.S, true, ""
+		}
+	}
+	return "unknown", true, ""
 }
 
 func main() {

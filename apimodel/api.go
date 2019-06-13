@@ -10,6 +10,8 @@ const (
 )
 
 type CreateReq struct {
+	Email                      string   `json:"email"`
+	AuthSessionId              string   `json:"authSessionId"`
 	YearOfBirth                int      `json:"yearOfBirth"`
 	Sex                        string   `json:"sex"`
 	DateTimeTermsAndConditions int64    `json:"dtTC"`

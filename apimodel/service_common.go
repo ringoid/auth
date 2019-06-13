@@ -94,3 +94,41 @@ func DisableCurrentAccessToken(userId, tableName string, awsDbClient *dynamodb.D
 	anlogger.Infof(lc, "service_common.go : successfully disable current access token for userId [%s]", userId)
 	return true, ""
 }
+
+//return ok, errorString if not ok
+func SwithCurrentAccessToken(userId, newSessionToken, tableName string, awsDbClient *dynamodb.DynamoDB, anlogger *commons.Logger, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "service_common.go : switch current access token for userId [%s]", userId)
+
+	input := &dynamodb.UpdateItemInput{
+		ExpressionAttributeNames: map[string]*string{
+			"#token":     aws.String(commons.SessionTokenColumnName),
+			"#updatedAt": aws.String(commons.TokenUpdatedTimeColumnName),
+		},
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":tV": {
+				S: aws.String(newSessionToken),
+			},
+			":uV": {
+				S: aws.String(time.Now().UTC().Format("2006-01-02-15-04-05.000")),
+			},
+		},
+		Key: map[string]*dynamodb.AttributeValue{
+			commons.UserIdColumnName: {
+				S: aws.String(userId),
+			},
+		},
+		ConditionExpression: aws.String(fmt.Sprintf("attribute_exists(%v)", commons.UserIdColumnName)),
+		TableName:           aws.String(tableName),
+		UpdateExpression:    aws.String("SET #token = :tV, #updatedAt = :uV"),
+	}
+
+	_, err := awsDbClient.UpdateItem(input)
+
+	if err != nil {
+		anlogger.Errorf(lc, "service_common.go : error switch current access token for userId [%s] : %v", userId, err)
+		return false, commons.InternalServerError
+	}
+
+	anlogger.Infof(lc, "service_common.go : successfully switch current access token for userId [%s]", userId)
+	return true, ""
+}

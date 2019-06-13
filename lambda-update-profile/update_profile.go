@@ -173,6 +173,42 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Upda
 		return nil, false, commons.WrongRequestParamsClientError
 	}
 
+	if len(req.Name) == 0 {
+		req.Name = "unknown"
+	}
+
+	if len(req.JobTitle) == 0 {
+		req.JobTitle = "unknown"
+	}
+
+	if len(req.Company) == 0 {
+		req.Company = "unknown"
+	}
+
+	if len(req.EducationText) == 0 {
+		req.EducationText = "unknown"
+	}
+
+	if len(req.About) == 0 {
+		req.About = "unknown"
+	}
+
+	if len(req.Instagram) == 0 {
+		req.Instagram = "unknown"
+	}
+
+	if len(req.TikTok) == 0 {
+		req.TikTok = "unknown"
+	}
+
+	if len(req.WhereLive) == 0 {
+		req.WhereLive = "unknown"
+	}
+
+	if len(req.WhereFrom) == 0 {
+		req.WhereFrom = "unknown"
+	}
+
 	anlogger.Debugf(lc, "update_profile.go : successfully parse request string [%s] to %v", params, req)
 	return &req, true, ""
 }

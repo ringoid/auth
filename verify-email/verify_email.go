@@ -15,14 +15,22 @@ import (
 	"github.com/ringoid/commons"
 	"strings"
 	"../apimodel"
+	"strconv"
+	"github.com/satori/go.uuid"
+	"github.com/dgrijalva/jwt-go"
 )
 
 var anlogger *commons.Logger
 var awsDbClient *dynamodb.DynamoDB
 var awsDeliveryStreamClient *firehose.Firehose
 
+var secretWord string
+
 var deliveryStreamName string
 var userProfileTable string
+
+var emailAuthTable string
+var authConfirmTable string
 
 func init() {
 	var env string
@@ -59,6 +67,18 @@ func init() {
 	}
 	anlogger.Debugf(nil, "lambda-initialization : verify_email.go : start with USER_PROFILE_TABLE = [%s]", userProfileTable)
 
+	emailAuthTable, ok = os.LookupEnv("EMAIL_AUTH_TABLE")
+	if !ok {
+		anlogger.Fatalf(nil, "lambda-initialization : login_with_email.go : env can not be empty EMAIL_AUTH_TABLE")
+	}
+	anlogger.Debugf(nil, "lambda-initialization : login_with_email.go : start with EMAIL_AUTH_TABLE = [%s]", emailAuthTable)
+
+	authConfirmTable, ok = os.LookupEnv("AUTH_CONFIRM_TABLE")
+	if !ok {
+		anlogger.Fatalf(nil, "lambda-initialization : login_with_email.go : env can not be empty AUTH_CONFIRM_TABLE")
+	}
+	anlogger.Debugf(nil, "lambda-initialization : login_with_email.go : start with AUTH_CONFIRM_TABLE = [%s]", authConfirmTable)
+
 	awsSession, err = session.NewSession(aws.NewConfig().
 		WithRegion(commons.Region).WithMaxRetries(commons.MaxRetries).
 		WithLogger(aws.LoggerFunc(func(args ...interface{}) { anlogger.AwsLog(args) })).WithLogLevel(aws.LogOff))
@@ -66,6 +86,8 @@ func init() {
 		anlogger.Fatalf(nil, "lambda-initialization : verify_email.go : error during initialization : %v", err)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : verify_email.go : aws session was successfully initialized")
+
+	secretWord = commons.GetSecret(fmt.Sprintf(commons.SecretWordKeyBase, env), commons.SecretWordKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "lambda-initialization : verify_email.go : dynamodb client was successfully initialized")
@@ -92,11 +114,17 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	if request.HTTPMethod != "POST" {
 		return commons.NewWrongHttpMethodServiceResponse(), nil
 	}
-	sourceIp := request.Headers["x-forwarded-for"]
+	//sourceIp := request.Headers["x-forwarded-for"]
 
 	anlogger.Debugf(lc, "verify_email.go : start handle request %v", request)
 
 	appVersion, isItAndroid, ok, errStr := commons.ParseAppVersionFromHeaders(request.Headers, anlogger, lc)
+	if !ok {
+		anlogger.Errorf(lc, "verify_email.go : return %s to client", errStr)
+		return commons.NewServiceResponse(errStr), nil
+	}
+
+	ok, errStr = commons.CheckAppVersion(appVersion, isItAndroid, anlogger, lc)
 	if !ok {
 		anlogger.Errorf(lc, "verify_email.go : return %s to client", errStr)
 		return commons.NewServiceResponse(errStr), nil
@@ -108,10 +136,48 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		return commons.NewServiceResponse(errStr), nil
 	}
 
-	anlogger.Debugf(lc, "verify_email.go : debug print %v %v %v %v", sourceIp, appVersion, isItAndroid, reqParam)
+	ok, errStr = baseCheck(reqParam.Email, reqParam.AuthSessionId, lc)
+	if !ok {
+		anlogger.Errorf(lc, "verify_email.go : return %s to client", errStr)
+		return commons.NewServiceResponse(errStr), nil
+	}
+
+	piCode, _ := strconv.Atoi(reqParam.PinCode)
+	userId, ok, errStr := completeEmailConfirmation(reqParam.Email, reqParam.AuthSessionId, piCode, lc)
+	if !ok {
+		anlogger.Errorf(lc, "verify_email.go : return %s to client", errStr)
+		return commons.NewServiceResponse(errStr), nil
+	}
+
+	newSessionToken, err := uuid.NewV4()
+	if err != nil {
+		anlogger.Errorf(lc, "verify_email.go : error while generate new sessionToken for userId [%s] : %v", userId, err)
+		errStr = commons.InternalServerError
+		anlogger.Errorf(lc, "verify_email.go : return %s to client", errStr)
+		return commons.NewServiceResponse(errStr), nil
+	}
+
+	ok, errStr = apimodel.SwithCurrentAccessToken(userId, newSessionToken.String(), userProfileTable, awsDbClient, anlogger, lc)
+	if !ok {
+		anlogger.Errorf(lc, "verify_email.go : return %s to client", errStr)
+		return commons.NewServiceResponse(errStr), nil
+	}
+
+	//create access token
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		commons.AccessTokenUserIdClaim:       userId,
+		commons.AccessTokenSessionTokenClaim: newSessionToken.String(),
+	})
+
+	tokenToString, err := accessToken.SignedString([]byte(secretWord))
+	if err != nil {
+		errStr = commons.InternalServerError
+		anlogger.Errorf(lc, "verify_email.go : error sign the token for userId [%s], return %s to the client : %v", userId, errStr, err)
+		return commons.NewServiceResponse(errStr), nil
+	}
 
 	resp := apimodel.VerifyEmailResponse{}
-	resp.AccessToken = "FakeAccessToken"
+	resp.AccessToken = tokenToString
 
 	body, err := json.Marshal(resp)
 	if err != nil {
@@ -147,52 +213,126 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Veri
 		return nil, false, commons.WrongRequestParamsClientError
 	}
 
+	_, err = strconv.Atoi(req.PinCode)
+	if err != nil {
+		anlogger.Errorf(lc, "verify_email.go : pin code is not int number, pin [%v]", req.PinCode)
+		return nil, false, commons.WrongRequestParamsClientError
+	}
+
 	//todo:implement email validation
 	anlogger.Debugf(lc, "verify_email.go : successfully parse request string [%s] to %v", params, req)
 	return &req, true, ""
 }
 
-//return ok and error string
-func updateUserProfile(userId, userProfileTableName string, req *apimodel.UpdateProfileRequest, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "verify_email.go : start update user profile for userId [%s], profile=%v", userId, req)
+//return userId, ok and error string
+func completeEmailConfirmation(email, authSessionId string, pin int, lc *lambdacontext.LambdaContext) (string, bool, string) {
+	anlogger.Debugf(lc, "verify_email.go : complete email confirmation, email [%s], pin [%d], auth session id [%s]",
+		email, pin, authSessionId)
 
-	input :=
-		&dynamodb.UpdateItemInput{
-			ExpressionAttributeNames: map[string]*string{
-				"#property":  aws.String(commons.UserProfilePropertyColumnName),
-				"#transport": aws.String(commons.UserProfileTransportColumnName),
-				"#income":    aws.String(commons.UserProfileIncomeColumnName),
-				"#height":    aws.String(commons.UserProfileHeightColumnName),
-				"#edu":       aws.String(commons.UserProfileEducationLevelColumnName),
-				"#hair":      aws.String(commons.UserProfileHairColorColumnName),
-				"#children":  aws.String(commons.UserProfileChildrenColumnName),
+	input := &dynamodb.UpdateItemInput{
+		ExpressionAttributeNames: map[string]*string{
+			"#pin":                     aws.String(commons.AuthConfirmPinColumnName),
+			"#authSessionId":           aws.String(commons.AuthConfirmSessionIdColumnName),
+			"#emailConfirmationStatus": aws.String(commons.AuthConfirmStatusColumnName),
+		},
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":authStatusStartedV": {
+				S: aws.String(commons.AuthConfirmStatusStartedValue),
 			},
-			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":propertyV":  {N: aws.String(fmt.Sprintf("%v", req.Property))},
-				":transportV": {N: aws.String(fmt.Sprintf("%v", req.Transport))},
-				":incomeV":    {N: aws.String(fmt.Sprintf("%v", req.Income))},
-				":heightV":    {N: aws.String(fmt.Sprintf("%v", req.Height))},
-				":eduV":       {N: aws.String(fmt.Sprintf("%v", req.Education))},
-				":hairV":      {N: aws.String(fmt.Sprintf("%v", req.HairColor))},
-				":childrenV":  {N: aws.String(fmt.Sprintf("%v", req.Children))},
+			":pinV": {
+				N: aws.String(fmt.Sprintf("%d", pin)),
 			},
-			Key: map[string]*dynamodb.AttributeValue{
-				commons.UserIdColumnName: {
-					S: aws.String(userId),
-				},
+			":authSessionIdV": {
+				S: aws.String(authSessionId),
 			},
-			TableName:        aws.String(userProfileTableName),
-			UpdateExpression: aws.String("SET #property = :propertyV, #transport = :transportV, #income = :incomeV, #height = :heightV, #edu = :eduV, #hair = :hairV, #children = :childrenV"),
-		}
+			":emailConfirmationStatusV": {
+				S: aws.String(commons.AuthConfirmStatusCompleteValue),
+			},
+		},
+		Key: map[string]*dynamodb.AttributeValue{
+			commons.AuthConfirmMailColumnName: {
+				S: aws.String(email),
+			},
+		},
+		ConditionExpression: aws.String("#emailConfirmationStatus = :authStatusStartedV AND #authSessionId = :authSessionIdV AND #pin = :pinV"),
+		TableName:           aws.String(authConfirmTable),
+		UpdateExpression:    aws.String("SET #emailConfirmationStatus = :emailConfirmationStatusV"),
+		ReturnValues:        aws.String("ALL_NEW"),
+	}
 
-	_, err := awsDbClient.UpdateItem(input)
+	res, err := awsDbClient.UpdateItem(input)
 	if err != nil {
-		anlogger.Errorf(lc, "verify_email.go : error update user profile for userId [%s], profile=%v : %v", userId, req, err)
+		anlogger.Errorf(lc, "verify_email.go : error to complete confirmation email [%s], pin [%d] and auth session id [%s] : %v",
+			email, pin, authSessionId, err)
+		return "", false, commons.WrongPinCodeClientError
+	}
+
+	propertyP, ok := res.Attributes[commons.AuthConfirmUserIdColumnName]
+	if !ok || propertyP.S == nil {
+		anlogger.Errorf(lc, "verify_email.go : error to complete confirmation, userId is empty, email [%s], pin [%d] and auth session id [%s] : %v",
+			email, pin, authSessionId, err)
+		return "", false, commons.EmailInvalidVerificationClientError
+	}
+	userId := *propertyP.S
+
+	anlogger.Infof(lc, "verify_email.go : successfully complete confirmation with email [%s], pin [%d] and auth session id [%s] with userId [%s]",
+		email, pin, authSessionId, userId)
+
+	return userId, true, ""
+}
+
+//return ok and error string
+func baseCheck(email, authSessionId string, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "verify_email.go : base check that we can proceed with pin, for email [%s] and "+
+		"authSessionId [%s]", email, authSessionId)
+
+	input := &dynamodb.GetItemInput{
+		Key: map[string]*dynamodb.AttributeValue{
+			commons.AuthConfirmMailColumnName: {
+				S: aws.String(email),
+			},
+		},
+		TableName:      aws.String(authConfirmTable),
+		ConsistentRead: aws.Bool(true),
+	}
+
+	result, err := awsDbClient.GetItem(input)
+	if err != nil {
+		anlogger.Errorf(lc, "verify_email.go : error get email confirm state for email [%s] : %v", email, err)
 		return false, commons.InternalServerError
 	}
 
-	anlogger.Infof(lc, "verify_email.go : successfully update user profile for userId [%s], settings=%v", userId, req)
+	if len(result.Item) == 0 {
+		anlogger.Errorf(lc, "get_profile.go : there is no email confirm record with email [%s]", email)
+		return false, commons.EmailInvalidVerificationClientError
+	}
+
+	ok, authSId := getStringValueProfileProperty(commons.AuthConfirmSessionIdColumnName, result, lc)
+	if !ok || authSessionId != authSId {
+		anlogger.Errorf(lc, "get_profile.go : there is no authSessionId in email confirm record or they are different, email [%s], "+
+			"session id stored in DB [%s], target session id [%s]", email, authSId, authSessionId)
+		return false, commons.EmailInvalidVerificationClientError
+	}
+
+	ok, confirmState := getStringValueProfileProperty(commons.AuthConfirmStatusColumnName, result, lc)
+	if !ok || confirmState != commons.AuthConfirmStatusStartedValue {
+		anlogger.Errorf(lc, "get_profile.go : there is no confirmation status in email confirm record or they are different, email [%s], "+
+			"state stored in DB [%s], target state id [%s]", email, confirmState, commons.AuthConfirmStatusStartedValue)
+		return false, commons.EmailInvalidVerificationClientError
+	}
+
 	return true, ""
+}
+
+//ok and string value
+func getStringValueProfileProperty(propertyName string, result *dynamodb.GetItemOutput, lc *lambdacontext.LambdaContext) (bool, string) {
+	profilePropertyP, ok := result.Item[propertyName]
+	if ok {
+		if profilePropertyP.S != nil {
+			return true, *profilePropertyP.S
+		}
+	}
+	return false, ""
 }
 
 func main() {

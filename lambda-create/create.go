@@ -39,6 +39,8 @@ var baseCloudWatchNamespace string
 var newUserWasCreatedMetricName string
 var awsCWClient *cloudwatch.CloudWatch
 
+var emailAuthTable string
+
 func init() {
 	var env string
 	var ok bool
@@ -91,6 +93,12 @@ func init() {
 		anlogger.Fatalf(nil, "lambda-initialization : create.go : env can not be empty CLOUD_WATCH_NEW_USER_WAS_CREATED")
 	}
 	anlogger.Debugf(nil, "lambda-initialization : create.go : start with CLOUD_WATCH_NEW_USER_WAS_CREATED = [%s]", newUserWasCreatedMetricName)
+
+	emailAuthTable, ok = os.LookupEnv("EMAIL_AUTH_TABLE")
+	if !ok {
+		anlogger.Fatalf(nil, "lambda-initialization : create.go : env can not be empty EMAIL_AUTH_TABLE")
+	}
+	anlogger.Debugf(nil, "lambda-initialization : create.go : start with EMAIL_AUTH_TABLE = [%s]", emailAuthTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
 		WithRegion(commons.Region).WithMaxRetries(commons.MaxRetries).
@@ -148,20 +156,10 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		return commons.NewServiceResponse(errStr), nil
 	}
 
-	switch isItAndroid {
-	case true:
-		if appVersion < commons.MinimalAndroidBuildNum {
-			errStr = commons.TooOldAppVersionClientError
-			anlogger.Errorf(lc, "create.go : return %s to client", errStr)
-			return commons.NewServiceResponse(errStr), nil
-		}
-	default:
-		if appVersion < commons.MinimaliOSBuildNum {
-			errStr = commons.TooOldAppVersionClientError
-			anlogger.Errorf(lc, "create.go : return %s to client", errStr)
-			return commons.NewServiceResponse(errStr), nil
-
-		}
+	ok, errStr = commons.CheckAppVersion(appVersion, isItAndroid, anlogger, lc)
+	if !ok {
+		anlogger.Errorf(lc, "create.go : return %s to client", errStr)
+		return commons.NewServiceResponse(errStr), nil
 	}
 
 	reqParam, ok, errStr := parseParams(request.Body, lc)
@@ -192,6 +190,16 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		return commons.NewServiceResponse(errStr), nil
 	}
 
+	//todo:delete if later
+	//check email and start email login
+	if len(reqParam.Email) != 0 && reqParam.Email != "n/a" {
+		ok, errStr = tryUpdateAuthStatusToCreated(userId, reqParam.Email, reqParam.AuthSessionId, lc)
+		if !ok {
+			anlogger.Errorf(lc, "commons.go : return %s to client", errStr)
+			return commons.NewServiceResponse(errStr), nil
+		}
+	}
+
 	ok, errStr = createUserProfile(userId, sessionId.String(), customerId.String(), appVersion, isItAndroid, reqParam, lc)
 	if !ok {
 		anlogger.Errorf(lc, "commons.go : return %s to client", errStr)
@@ -217,7 +225,7 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		isItAndroid)
 	commons.SendAnalyticEvent(eventAcceptTerms, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
-	eventNewUser := commons.NewUserProfileCreatedEvent(userId, reqParam.Sex, sourceIp, reqParam.ReferralId, reqParam.PrivateKey, reqParam.YearOfBirth)
+	eventNewUser := commons.NewUserProfileCreatedEvent(userId, reqParam.Email, reqParam.Sex, sourceIp, reqParam.ReferralId, reqParam.PrivateKey, reqParam.YearOfBirth)
 	commons.SendAnalyticEvent(eventNewUser, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	settingsEvent := commons.NewUserSettingsUpdatedEvent(userId, sourceIp, userSettings.Locale, true,
@@ -317,6 +325,22 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Crea
 		return nil, false, commons.WrongRequestParamsClientError
 	}
 
+	//todo:uncomment
+	//if req.Email == "" || req.AuthSessionId == "" {
+	//	anlogger.Errorf(lc, "create.go : required param email [%s] or authSessionId [%s] is empty", req.Email, req.AuthSessionId)
+	//	return nil, false, commons.WrongRequestParamsClientError
+	//}
+	//todo:mb validate email
+
+	if (req.Email == "" && req.AuthSessionId != "") || (req.Email != "" && req.AuthSessionId == "") {
+		anlogger.Errorf(lc, "create.go : required param email [%s] or authSessionId [%s] is empty", req.Email, req.AuthSessionId)
+		return nil, false, commons.WrongRequestParamsClientError
+	}
+
+	if req.Email == "" {
+		req.Email = "n/a"
+	}
+
 	anlogger.Debugf(lc, "create.go : successfully parse request string [%s] to %v", params, req)
 	return &req, true, ""
 }
@@ -352,6 +376,7 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 			"#reportStatus":     aws.String(commons.UserReportStatusColumnName),
 			"#referralId":       aws.String(commons.ReferralIdColumnName),
 			"#privateKey":       aws.String(commons.PrivateKeyColumnName),
+			"#email":            aws.String(commons.UserEmailColumnName),
 		},
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":tV": {
@@ -399,6 +424,9 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 			":privateKeyV": {
 				S: aws.String(req.PrivateKey),
 			},
+			":emailV": {
+				S: aws.String(req.Email),
+			},
 		},
 		Key: map[string]*dynamodb.AttributeValue{
 			commons.UserIdColumnName: {
@@ -407,7 +435,7 @@ func createUserProfile(userId, sessionToken, customerId string, buildNum int, is
 		},
 		ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", commons.UserIdColumnName)),
 		TableName:           aws.String(userProfileTable),
-		UpdateExpression:    aws.String("SET #token = :tV, #updatedAt = :uV, #sex = :sV, #year = :yV, #created = :cV, #onlineTime = :onlineTimeV, #buildNum = :buildNumV, #customerId = :cIdV, #currentIsAndroid = :currentIsAndroidV, #device = :deviceV, #os = :osV, #status = :statusV, #reportStatus = :reportStatusV, #referralId = :referralIdV, #privateKey = :privateKeyV"),
+		UpdateExpression:    aws.String("SET #token = :tV, #updatedAt = :uV, #sex = :sV, #year = :yV, #created = :cV, #onlineTime = :onlineTimeV, #buildNum = :buildNumV, #customerId = :cIdV, #currentIsAndroid = :currentIsAndroidV, #device = :deviceV, #os = :osV, #status = :statusV, #reportStatus = :reportStatusV, #referralId = :referralIdV, #privateKey = :privateKeyV, #email = :emailV"),
 	}
 
 	_, err := awsDbClient.UpdateItem(input)
@@ -504,6 +532,61 @@ func createUserSettingsIntoDynamo(userId string, settings *apimodel.Settings, lc
 	}
 
 	anlogger.Infof(lc, "create.go : successfully create default user's settings for userId [%s]", userId)
+	return true, ""
+}
+
+func tryUpdateAuthStatusToCreated(userId, email, authSessionId string, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "create.go : update auth status to created state for userId [%s], email [%s], auth session id [%s]",
+		userId, email, authSessionId)
+
+	input := &dynamodb.UpdateItemInput{
+		ExpressionAttributeNames: map[string]*string{
+			"#authStatus":    aws.String(commons.EmailAuthStatusColumnName),
+			"#authSessionId": aws.String(commons.EmailAuthSessionIdColumnName),
+			"#userId":        aws.String(commons.EmailAuthUserIdColumnName),
+		},
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":authStatusStartedV": {
+				S: aws.String(commons.EmailAuthStatusStartedValue),
+			},
+			":authStatusV": {
+				S: aws.String(commons.EmailAuthStatusAccountCreatedValue),
+			},
+			":authSessionIdV": {
+				S: aws.String(authSessionId),
+			},
+			":userIdV": {
+				S: aws.String(userId),
+			},
+		},
+		Key: map[string]*dynamodb.AttributeValue{
+			commons.EmailAuthMailColumnName: {
+				S: aws.String(email),
+			},
+		},
+		ConditionExpression: aws.String("#authStatus = :authStatusStartedV AND #authSessionId = :authSessionIdV"),
+		TableName:           aws.String(emailAuthTable),
+		UpdateExpression:    aws.String("SET #authStatus = :authStatusV, #userId = :userIdV"),
+	}
+
+	_, err := awsDbClient.UpdateItem(input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case dynamodb.ErrCodeConditionalCheckFailedException:
+				anlogger.Errorf(lc, "create.go : error concurrent usage email [%s] for userId [%s]", email, userId)
+				return false, commons.EmailConcurrentUsageClientError
+			default:
+				anlogger.Errorf(lc, "create.go : error update email auth status for email [%s] and userId [%s] : %v", email, userId, aerr)
+				return false, commons.InternalServerError
+			}
+		}
+		anlogger.Errorf(lc, "create.go : error update email auth status for email [%s] and userId [%s] : %v", email, userId, err)
+		return false, commons.InternalServerError
+	}
+
+	anlogger.Infof(lc, "create.go : successfully update auth status to account created state, email [%s], userId [%s]",
+		email, userId)
 	return true, ""
 }
 

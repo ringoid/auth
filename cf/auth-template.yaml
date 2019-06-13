@@ -151,6 +151,8 @@ Globals:
                 !Join [ "-", [ !Ref Env, DeliveryStreamExportName] ]
             USER_PROFILE_TABLE: !Ref UserProfileTable
             USER_SETTINGS_TABLE: !Ref UserSettingsTable
+            EMAIL_AUTH_TABLE: !Ref EmailAuthTable
+            AUTH_CONFIRM_TABLE: !Ref AuthConfirmTable
             COMMON_STREAM:
               Fn::ImportValue:
                 !Join [ "-", [ !Ref Env, CommonEventStreamExportName] ]
@@ -428,6 +430,7 @@ Resources:
       Policies:
         - AmazonDynamoDBFullAccess
         - AmazonKinesisFirehoseFullAccess
+        - SecretsManagerReadWrite
 
   VerifyEmailAuthFunctionTargetGroup:
     Type: Custom::CreateTargetGroup
@@ -564,6 +567,52 @@ Resources:
           KeySchema:
             -
               AttributeName: user_id
+              KeyType: HASH
+          Tags:
+            - Key: Company
+              Value: Ringoid
+            - Key: Service
+              Value: auth
+            - Key: Environment
+              Value: !Ref Env
+
+  EmailAuthTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+          TableName: !Join [ "-", [ !Ref Env, Auth, EmailAuthTable] ]
+          PointInTimeRecoverySpecification:
+            PointInTimeRecoveryEnabled: true
+          BillingMode: PAY_PER_REQUEST
+          AttributeDefinitions:
+            -
+              AttributeName: email
+              AttributeType: S
+          KeySchema:
+            -
+              AttributeName: email
+              KeyType: HASH
+          Tags:
+            - Key: Company
+              Value: Ringoid
+            - Key: Service
+              Value: auth
+            - Key: Environment
+              Value: !Ref Env
+
+  AuthConfirmTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+          TableName: !Join [ "-", [ !Ref Env, Auth, AuthConfirmTable] ]
+          PointInTimeRecoverySpecification:
+            PointInTimeRecoveryEnabled: true
+          BillingMode: PAY_PER_REQUEST
+          AttributeDefinitions:
+            -
+              AttributeName: email
+              AttributeType: S
+          KeySchema:
+            -
+              AttributeName: email
               KeyType: HASH
           Tags:
             - Key: Company
