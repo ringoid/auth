@@ -138,15 +138,6 @@ func (req ChangeEmailRequest) String() string {
 	return fmt.Sprintf("%#v", req)
 }
 
-type ChangeEmailResponse struct {
-	commons.BaseResponse
-	AuthSessionId string `json:"authSessionId,omitempty"`
-}
-
-func (req ChangeEmailResponse) String() string {
-	return fmt.Sprintf("%#v", req)
-}
-
 type GetProfileResponse struct {
 	commons.BaseResponse
 	CustomerId     string `json:"customerId"`

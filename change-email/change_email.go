@@ -16,6 +16,7 @@ import (
 	"strings"
 	"../apimodel"
 	"github.com/aws/aws-sdk-go/service/kinesis"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 )
 
 var anlogger *commons.Logger
@@ -27,6 +28,8 @@ var deliveryStreamName string
 var userProfileTable string
 var secretWord string
 var commonStreamName string
+var emailAuthTable string
+var authConfirmTable string
 
 func init() {
 	var env string
@@ -69,6 +72,18 @@ func init() {
 		os.Exit(1)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : change_email.go : start with DELIVERY_STREAM = [%s]", commonStreamName)
+
+	emailAuthTable, ok = os.LookupEnv("EMAIL_AUTH_TABLE")
+	if !ok {
+		anlogger.Fatalf(nil, "lambda-initialization : change_email.go : env can not be empty EMAIL_AUTH_TABLE")
+	}
+	anlogger.Debugf(nil, "lambda-initialization : change_email.go : start with EMAIL_AUTH_TABLE = [%s]", emailAuthTable)
+
+	authConfirmTable, ok = os.LookupEnv("AUTH_CONFIRM_TABLE")
+	if !ok {
+		anlogger.Fatalf(nil, "lambda-initialization : change_email.go : env can not be empty AUTH_CONFIRM_TABLE")
+	}
+	anlogger.Debugf(nil, "lambda-initialization : change_email.go : start with AUTH_CONFIRM_TABLE = [%s]", authConfirmTable)
 
 	awsSession, err = session.NewSession(aws.NewConfig().
 		WithRegion(commons.Region).WithMaxRetries(commons.MaxRetries).
@@ -130,9 +145,28 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		return commons.NewServiceResponse(errStr), nil
 	}
 
-	anlogger.Debugf(lc, "change_email.go : debug print %v %v %v %v %v", sourceIp, appVersion, isItAndroid, reqParam, userId)
+	currentEmail, ok, errStr := currentEmail(userId, lc)
+	if !ok {
+		anlogger.Errorf(lc, "change_email.go : return %s to client", errStr)
+		return commons.NewServiceResponse(errStr), nil
+	}
 
-	resp := apimodel.ChangeEmailResponse{}
+	ok, errStr = tryUpdateAuthStatusForNewEmail(userId, reqParam.NewEmail, lc)
+	if !ok {
+		anlogger.Errorf(lc, "change_email.go : return %s to client", errStr)
+		return commons.NewServiceResponse(errStr), nil
+	}
+
+	ok, errStr = cleanEmailState(userId, currentEmail, reqParam.NewEmail, lc)
+	if !ok {
+		anlogger.Errorf(lc, "change_email.go : return %s to client", errStr)
+		return commons.NewServiceResponse(errStr), nil
+	}
+
+	changeEmailEvent := commons.NewUserChangeEmailEvent(userId, currentEmail, reqParam.NewEmail, sourceIp)
+	commons.SendAnalyticEvent(changeEmailEvent, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
+
+	resp := commons.BaseResponse{}
 
 	body, err := json.Marshal(resp)
 	if err != nil {
@@ -141,7 +175,168 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	}
 	anlogger.Debugf(lc, "change_email.go : return body=%s", string(body))
 
+	anlogger.Infof(lc, "change_email.go : successfully change old email [%s] to new one [%s] for userId [%s]",
+		currentEmail, reqParam.NewEmail, userId)
+
 	return commons.NewServiceResponse(string(body)), nil
+}
+
+//return current email, ok and error string
+func currentEmail(userId string, lc *lambdacontext.LambdaContext) (string, bool, string) {
+	anlogger.Debugf(lc, "change_email.go : fetch current email for userId [%s]", userId)
+
+	input := &dynamodb.GetItemInput{
+		Key: map[string]*dynamodb.AttributeValue{
+			commons.UserIdColumnName: {
+				S: aws.String(userId),
+			},
+		},
+		TableName:      aws.String(userProfileTable),
+		ConsistentRead: aws.Bool(true),
+	}
+
+	result, err := awsDbClient.GetItem(input)
+	if err != nil {
+		anlogger.Errorf(lc, "change_email.go : error fetch current email for userId [%s] : %v", userId, err)
+		return "", false, commons.InternalServerError
+	}
+
+	if len(result.Item) == 0 {
+		anlogger.Errorf(lc, "change_email.go : there is no such user in DB, userId [%s]", userId)
+		return "", false, commons.InternalServerError
+	}
+
+	var email string
+	attrValue := result.Item[commons.UserEmailColumnName]
+	if attrValue != nil {
+		email = *attrValue.S
+		anlogger.Debugf(lc, "change_email.go : found current email [%s] for userId [%s]", email, userId)
+	} else {
+		anlogger.Debugf(lc, "change_email.go : there is no current email for userId [%s]", userId)
+	}
+
+	return email, true, ""
+}
+
+//return ok and error string
+func tryUpdateAuthStatusForNewEmail(userId, email string, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "change_email.go : update auth status to account created state, for userId [%s] and email [%s]",
+		userId, email)
+
+	input := &dynamodb.UpdateItemInput{
+		ExpressionAttributeNames: map[string]*string{
+			"#authStatus":    aws.String(commons.EmailAuthStatusColumnName),
+			"#authSessionId": aws.String(commons.EmailAuthSessionIdColumnName),
+			"#userId":        aws.String(commons.EmailAuthUserIdColumnName),
+		},
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":authStatusStartedV": {
+				S: aws.String(commons.EmailAuthStatusStartedValue),
+			},
+			":authStatusV": {
+				S: aws.String(commons.EmailAuthStatusAccountCreatedValue),
+			},
+			":authSessionIdV": {
+				S: aws.String("CHANGE_EMAIL"),
+			},
+			":userIdV": {
+				S: aws.String(userId),
+			},
+		},
+		Key: map[string]*dynamodb.AttributeValue{
+			commons.EmailAuthMailColumnName: {
+				S: aws.String(email),
+			},
+		},
+		ConditionExpression: aws.String(
+			fmt.Sprintf("attribute_not_exists(%s) OR #authStatus = :authStatusStartedV",
+				commons.EmailAuthSessionIdColumnName)),
+		TableName:        aws.String(emailAuthTable),
+		UpdateExpression: aws.String("SET #authStatus = :authStatusV, #authSessionId = :authSessionIdV, #userId = :userIdV"),
+	}
+
+	_, err := awsDbClient.UpdateItem(input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case dynamodb.ErrCodeConditionalCheckFailedException:
+				anlogger.Errorf(lc, "change_email.go : error, try to change for already exist email [%s] for userId [%s]", email, userId)
+				return false, commons.EmailAlreadyInUseClientError
+			default:
+				anlogger.Errorf(lc, "change_email.go : error to change for already exist email [%s] for userId [%s] : %v", email, userId, aerr)
+				return false, commons.InternalServerError
+			}
+		}
+		anlogger.Errorf(lc, "change_email.go : error to change for already exist email [%s] for userId [%s] : %v", email, userId, err)
+		return false, commons.InternalServerError
+	}
+
+	anlogger.Debugf(lc, "change_email.go : successfully change email [%s] for userId [%s] in EmailAuth table", email, userId)
+	return true, ""
+}
+
+func cleanEmailState(userId, oldEmail, newEmail string, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Debugf(lc, "change_email.go : clean email state from old [%s] for new one [%s] for userId [%s]", oldEmail, newEmail, userId)
+
+	input := &dynamodb.BatchWriteItemInput{
+		RequestItems: map[string][]*dynamodb.WriteRequest{
+			emailAuthTable: {
+				{
+					DeleteRequest: &dynamodb.DeleteRequest{
+						Key: map[string]*dynamodb.AttributeValue{
+							commons.EmailAuthMailColumnName: {
+								S: aws.String(oldEmail),
+							},
+						},
+					},
+				},
+			},
+			authConfirmTable: {
+				{
+					DeleteRequest: &dynamodb.DeleteRequest{
+						Key: map[string]*dynamodb.AttributeValue{
+							commons.AuthConfirmMailColumnName: {
+								S: aws.String(oldEmail),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := awsDbClient.BatchWriteItem(input)
+	if err != nil {
+		anlogger.Errorf(lc, "change_email.go : error clean email state for old email [%s] for userId [%s] : %v", oldEmail, userId, err)
+		return false, commons.InternalServerError
+	}
+
+	inputU := &dynamodb.UpdateItemInput{
+		ExpressionAttributeNames: map[string]*string{
+			"#email": aws.String(commons.UserEmailColumnName),
+		},
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":emailV": {
+				S: aws.String(newEmail),
+			},
+		},
+		Key: map[string]*dynamodb.AttributeValue{
+			commons.UserIdColumnName: {
+				S: aws.String(userId),
+			},
+		},
+		TableName:        aws.String(userProfileTable),
+		UpdateExpression: aws.String("SET #email = :emailV"),
+	}
+
+	_, err = awsDbClient.UpdateItem(inputU)
+	if err != nil {
+		anlogger.Errorf(lc, "change_email.go : error update email [%s] for userId [%s] : %v", newEmail, userId, err)
+		return false, commons.InternalServerError
+	}
+
+	anlogger.Debugf(lc, "change_email.go : successfully clean email state from old [%s] for new one [%s] for userId [%s]", oldEmail, newEmail, userId)
+	return true, ""
 }
 
 func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.ChangeEmailRequest, bool, string) {
@@ -153,11 +348,6 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Chan
 		return nil, false, commons.InternalServerError
 	}
 
-	if req.AccessToken == "" {
-		anlogger.Errorf(lc, "change_email.go : empty or nil accessToken request param, req %v", req)
-		return nil, false, commons.WrongRequestParamsClientError
-	}
-
 	if req.NewEmail == "" {
 		anlogger.Errorf(lc, "change_email.go : empty or nil newEmail request param, req %v", req)
 		return nil, false, commons.WrongRequestParamsClientError
@@ -166,49 +356,6 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Chan
 	//todo:implement email validation
 	anlogger.Debugf(lc, "change_email.go : successfully parse request string [%s] to %v", params, req)
 	return &req, true, ""
-}
-
-//return ok and error string
-func updateUserProfile(userId, userProfileTableName string, req *apimodel.UpdateProfileRequest, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Debugf(lc, "change_email.go : start update user profile for userId [%s], profile=%v", userId, req)
-
-	input :=
-		&dynamodb.UpdateItemInput{
-			ExpressionAttributeNames: map[string]*string{
-				"#property":  aws.String(commons.UserProfilePropertyColumnName),
-				"#transport": aws.String(commons.UserProfileTransportColumnName),
-				"#income":    aws.String(commons.UserProfileIncomeColumnName),
-				"#height":    aws.String(commons.UserProfileHeightColumnName),
-				"#edu":       aws.String(commons.UserProfileEducationLevelColumnName),
-				"#hair":      aws.String(commons.UserProfileHairColorColumnName),
-				"#children":  aws.String(commons.UserProfileChildrenColumnName),
-			},
-			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":propertyV":  {N: aws.String(fmt.Sprintf("%v", req.Property))},
-				":transportV": {N: aws.String(fmt.Sprintf("%v", req.Transport))},
-				":incomeV":    {N: aws.String(fmt.Sprintf("%v", req.Income))},
-				":heightV":    {N: aws.String(fmt.Sprintf("%v", req.Height))},
-				":eduV":       {N: aws.String(fmt.Sprintf("%v", req.Education))},
-				":hairV":      {N: aws.String(fmt.Sprintf("%v", req.HairColor))},
-				":childrenV":  {N: aws.String(fmt.Sprintf("%v", req.Children))},
-			},
-			Key: map[string]*dynamodb.AttributeValue{
-				commons.UserIdColumnName: {
-					S: aws.String(userId),
-				},
-			},
-			TableName:        aws.String(userProfileTableName),
-			UpdateExpression: aws.String("SET #property = :propertyV, #transport = :transportV, #income = :incomeV, #height = :heightV, #edu = :eduV, #hair = :hairV, #children = :childrenV"),
-		}
-
-	_, err := awsDbClient.UpdateItem(input)
-	if err != nil {
-		anlogger.Errorf(lc, "change_email.go : error update user profile for userId [%s], profile=%v : %v", userId, req, err)
-		return false, commons.InternalServerError
-	}
-
-	anlogger.Infof(lc, "change_email.go : successfully update user profile for userId [%s], settings=%v", userId, req)
-	return true, ""
 }
 
 func main() {
