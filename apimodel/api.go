@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	MaxReferralCodeLength = 16
+	MaxReferralCodeLength = 256
 )
 
 type CreateReq struct {

@@ -227,8 +227,8 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Clai
 		anlogger.Errorf(lc, "claim.go : referral code is empty or non exist, code [%s]", referealCode)
 		return nil, false
 	} else if len([]rune(referealCode)) > apimodel.MaxReferralCodeLength {
-		anlogger.Errorf(lc, "claim.go : too big referral code [%s]", referealCode)
-		return nil, false
+		anlogger.Errorf(lc, "claim.go : too big referral code [%s], len [%d]", referealCode, len([]rune(referealCode)))
+		//return nil, false
 	}
 
 	req.ReferralId = referealCode
