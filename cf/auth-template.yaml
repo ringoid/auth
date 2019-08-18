@@ -394,6 +394,7 @@ Resources:
       Policies:
         - AmazonDynamoDBFullAccess
         - AmazonKinesisFirehoseFullAccess
+        - SecretsManagerReadWrite
 
   LoginWithEmailAuthFunctionTargetGroup:
     Type: Custom::CreateTargetGroup

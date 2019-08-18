@@ -94,7 +94,8 @@ func (req UpdateProfileRequest) String() string {
 }
 
 type LoginWithEmailRequest struct {
-	Email string `json:"email"`
+	Email  string `json:"email"`
+	Locale string `json:"locale"`
 }
 
 func (req LoginWithEmailRequest) String() string {

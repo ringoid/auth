@@ -18,6 +18,14 @@ import (
 	"github.com/satori/go.uuid"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"math/rand"
+	"github.com/mailgun/mailgun-go"
+	"time"
+)
+
+const (
+	ringoidAppDomain = "ringoid.app"
+	emailSender      = "Ringoid Support <support@ringoid.com>"
+	emailTemplate    = "verification_code"
 )
 
 var anlogger *commons.Logger
@@ -27,6 +35,7 @@ var awsDeliveryStreamClient *firehose.Firehose
 var deliveryStreamName string
 var emailAuthTable string
 var authConfirmTable string
+var mailgunApiKey string
 
 func init() {
 	var env string
@@ -74,6 +83,8 @@ func init() {
 		anlogger.Fatalf(nil, "lambda-initialization : login_with_email.go : error during initialization : %v", err)
 	}
 	anlogger.Debugf(nil, "lambda-initialization : login_with_email.go : aws session was successfully initialized")
+
+	mailgunApiKey = commons.GetSecret(fmt.Sprintf(commons.MailGunApiKeyBase, env), commons.MailGunApiKeyName, awsSession, anlogger, nil)
 
 	awsDbClient = dynamodb.New(awsSession)
 	anlogger.Debugf(nil, "lambda-initialization : login_with_email.go : dynamodb client was successfully initialized")
@@ -154,7 +165,7 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 			return commons.NewServiceResponse(errStr), nil
 		}
 
-		ok, errStr = sendEmailWithPin(reqParam.Email, pinCode, lc)
+		ok, errStr = sendEmailWithPin(reqParam.Email, reqParam.Locale, pinCode, lc)
 		if !ok {
 			anlogger.Errorf(lc, "login_with_email.go : return %s to client", errStr)
 			return commons.NewServiceResponse(errStr), nil
@@ -337,8 +348,38 @@ func startEmailConfirmation(userId, email, authSessionId string, pin int, lc *la
 	return true, ""
 }
 
-func sendEmailWithPin(email string, pin int, lc *lambdacontext.LambdaContext) (bool, string) {
-	anlogger.Errorf(lc, "!!! EMAIL [%s], PIN [%d]", email, pin)
+func sendEmailWithPin(email, locale string, pin int, lc *lambdacontext.LambdaContext) (bool, string) {
+	anlogger.Infof(lc, "login_with_email.go : send verification code [%d] for [%s]", pin, email)
+	mg := mailgun.NewMailgun(ringoidAppDomain, mailgunApiKey)
+	mg.SetAPIBase(mailgun.APIBaseEU)
+	subject := fmt.Sprintf("%d is your verification code", pin)
+	if locale == "ru" {
+		subject = fmt.Sprintf("%d Ваш код верификации", pin)
+	}
+
+	message := mg.NewMessage(emailSender, subject, "", email)
+	message.SetTemplate(emailTemplate)
+	message.AddVariable("code", pin)
+	if locale == "ru" {
+		message.AddVariable("ru", true)
+	} else {
+		message.AddVariable("en", true)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	// Send the message	with a 10 second timeout
+	resp, id, err := mg.Send(ctx, message)
+
+	if err != nil {
+		anlogger.Errorf(lc, "login_with_email.go : error sending verification code [%d] for [%s] : %v", pin, email, err)
+		return false, commons.InternalServerError
+	}
+
+	anlogger.Infof(lc, "login_with_email.go : successfully sent verification code [%d] for [%s] with id [%s] and resp [%s]",
+		pin, email, id, resp)
+
 	return true, ""
 }
 
