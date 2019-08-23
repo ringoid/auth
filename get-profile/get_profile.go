@@ -296,6 +296,12 @@ func getUserProfile(userId, userProfileTableName string, lc *lambdacontext.Lambd
 	}
 	profile.WhereFrom = wIFrom
 
+	sText, ok, errStr := getStringValueProfileProperty(userId, commons.UserProfileStatusTextColumnName, result, lc)
+	if !ok {
+		return nil, false, errStr
+	}
+	profile.StatusText = sText
+
 	anlogger.Debugf(lc, "get_profile.go : successfully get user profile [%v] for userId [%s]", profile, userId)
 
 	anlogger.Infof(lc, "get_profile.go : successfully get user profile for userId [%s]", userId)

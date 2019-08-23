@@ -138,7 +138,7 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	event := commons.NewUserProfileUpdatedEvent(userId, sourceIp, reqParam.Property, reqParam.Transport, reqParam.Income,
 		reqParam.Height, reqParam.Education, reqParam.HairColor, reqParam.Children,
 		reqParam.Name, reqParam.JobTitle, reqParam.Company, reqParam.EducationText, reqParam.About, reqParam.Instagram,
-		reqParam.TikTok, reqParam.WhereLive, reqParam.WhereFrom)
+		reqParam.TikTok, reqParam.WhereLive, reqParam.WhereFrom, reqParam.StatusText)
 	commons.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
 	partitionKey := userId
@@ -207,6 +207,10 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (*apimodel.Upda
 
 	if len(req.WhereFrom) == 0 {
 		req.WhereFrom = "unknown"
+	}
+
+	if len(req.StatusText) == 0 {
+		req.StatusText = "unknown"
 	}
 
 	anlogger.Debugf(lc, "update_profile.go : successfully parse request string [%s] to %v", params, req)
@@ -306,6 +310,14 @@ func updateUserProfile(userId, userProfileTableName string, req *apimodel.Update
 			S: aws.String(req.WhereFrom),
 		}
 		updateExp += ", #whereFrom = :whereFromV"
+	}
+
+	if len(req.StatusText) != 0 {
+		expressionAttrNames["#statusText"] = aws.String(commons.UserProfileStatusTextColumnName)
+		expressionAttributeValues[":statusTextV"] = &dynamodb.AttributeValue{
+			S: aws.String(req.StatusText),
+		}
+		updateExp += ", #statusText = :statusTextV"
 	}
 
 	input :=
