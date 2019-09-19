@@ -48,7 +48,7 @@ func init() {
 	}
 	fmt.Printf("lambda-initialization : update_profile.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
-	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "update-profile-auth"))
+	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "update-profile-auth"), apimodel.IsDebugLogEnabled)
 	if err != nil {
 		fmt.Errorf("lambda-initialization : update_profile.go : error during startup : %v\n", err)
 		os.Exit(1)

@@ -7,6 +7,7 @@ import (
 
 const (
 	MaxReferralCodeLength = 256
+	IsDebugLogEnabled = false
 )
 
 type CreateReq struct {

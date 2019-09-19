@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/ringoid/commons"
 	"strings"
+	"../apimodel"
 )
 
 var anlogger *commons.Logger
@@ -48,7 +49,7 @@ func init() {
 	}
 	fmt.Printf("lambda-initialization : update_settings.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
-	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "update-settings-auth"))
+	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "update-settings-auth"), apimodel.IsDebugLogEnabled)
 	if err != nil {
 		fmt.Errorf("lambda-initialization : update_settings.go : error during startup : %v\n", err)
 		os.Exit(1)

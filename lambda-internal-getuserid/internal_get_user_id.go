@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"strings"
 	"github.com/ringoid/commons"
+	"../apimodel"
 )
 
 var anlogger *commons.Logger
@@ -42,7 +43,7 @@ func init() {
 	}
 	fmt.Printf("lambda-initialization : internal_get_user_id.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
-	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "internal-get-user-id-auth"))
+	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "internal-get-user-id-auth"), apimodel.IsDebugLogEnabled)
 	if err != nil {
 		fmt.Errorf("lambda-initialization :  internal_get_user_id.go : error during startup : %v\n", err)
 		os.Exit(1)

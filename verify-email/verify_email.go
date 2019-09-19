@@ -53,7 +53,7 @@ func init() {
 	}
 	fmt.Printf("lambda-initialization : verify_email.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
-	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "verify-email-auth"))
+	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "verify-email-auth"), apimodel.IsDebugLogEnabled)
 	if err != nil {
 		fmt.Errorf("lambda-initialization : verify_email.go : error during startup : %v\n", err)
 		os.Exit(1)

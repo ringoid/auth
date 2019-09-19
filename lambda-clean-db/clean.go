@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 	"errors"
 	"github.com/ringoid/commons"
+	"../apimodel"
 )
 
 var anlogger *commons.Logger
@@ -45,7 +46,7 @@ func init() {
 	}
 	fmt.Printf("lambda-initialization : clean.go : start with PAPERTRAIL_LOG_ADDRESS = [%s]\n", papertrailAddress)
 
-	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "internal-clean-db-auth"))
+	anlogger, err = commons.New(papertrailAddress, fmt.Sprintf("%s-%s", env, "internal-clean-db-auth"), apimodel.IsDebugLogEnabled)
 	if err != nil {
 		fmt.Errorf("lambda-initialization : clean.go : error during startup : %v\n", err)
 		os.Exit(1)
