@@ -172,6 +172,12 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		pushNewMatchBool = pushNewMatchIntr.(bool)
 	}
 
+	pushVibrationIntr, pushVibrationOk := reqParamMap["vibration"]
+	var pushVibrationBool bool
+	if pushVibrationOk {
+		pushVibrationBool = pushVibrationIntr.(bool)
+	}
+
 	timeZoneFlt, timeZoneOk := reqParamMap["timeZone"]
 	var timeZoneInt int
 	if timeZoneOk {
@@ -181,6 +187,7 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		commons.NewUserSettingsUpdatedEvent(userId, sourceIp, localeStr, localeOk,
 			pushBool, pushNewLikeBool, pushNewMatchBool, pushNewMessageBool,
 			pushOk, pushNewLikeOk, pushNewMatchOk, pushNewMessageOk,
+			pushVibrationBool, pushVibrationOk,
 			timeZoneInt, timeZoneOk)
 	commons.SendAnalyticEvent(event, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
@@ -263,6 +270,15 @@ func parseParams(params string, lc *lambdacontext.LambdaContext) (map[string]int
 		_, ok = timeZoneFlt.(float64)
 		if !ok {
 			anlogger.Errorf(lc, "update_settings.go : error format of timeZone in request param, req %v", reqMap)
+			return nil, false, commons.WrongRequestParamsClientError
+		}
+	}
+
+	pushVibrationIntr, ok := reqMap["vibration"]
+	if ok {
+		_, ok = pushVibrationIntr.(bool)
+		if !ok {
+			anlogger.Errorf(lc, "update_settings.go : error format of vibration in request param, req %v", reqMap)
 			return nil, false, commons.WrongRequestParamsClientError
 		}
 	}
@@ -435,6 +451,33 @@ func updateUserSettings(userId string, mapSettings map[string]interface{}, lc *l
 			_, err := awsDbClient.UpdateItem(input)
 			if err != nil {
 				anlogger.Errorf(lc, "update_settings.go : error update user pushNewMessage settings for userId [%s], settings=%v : %v", userId, mapSettings, err)
+				return false, commons.InternalServerError
+			}
+		} else if key == "vibration" {
+			//we already checked that we can convert to bool in parse param
+			input :=
+				&dynamodb.UpdateItemInput{
+					ExpressionAttributeNames: map[string]*string{
+						"#pushVibration": aws.String(commons.PushVibrationColumnName),
+					},
+					ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+						":pushVibrationV": {
+							BOOL: aws.Bool(value.(bool)),
+						},
+					},
+					Key: map[string]*dynamodb.AttributeValue{
+						commons.UserIdColumnName: {
+							S: aws.String(userId),
+						},
+					},
+
+					TableName:        aws.String(userSettingsTable),
+					UpdateExpression: aws.String("SET #pushVibration = :pushVibrationV"),
+				}
+
+			_, err := awsDbClient.UpdateItem(input)
+			if err != nil {
+				anlogger.Errorf(lc, "update_settings.go : error update user vibration settings for userId [%s], settings=%v : %v", userId, mapSettings, err)
 				return false, commons.InternalServerError
 			}
 		}

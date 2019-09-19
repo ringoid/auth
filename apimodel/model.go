@@ -12,5 +12,6 @@ func NewSettings(req *CreateReq) *Settings {
 		PushNewLike:    req.AppSettings.PushNewLike,
 		PushNewMatch:   req.AppSettings.PushNewMatch,
 		PushNewMessage: req.AppSettings.PushNewMessage,
+		PushVibration:  true,
 	}
 }

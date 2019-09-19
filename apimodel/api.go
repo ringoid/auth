@@ -7,7 +7,7 @@ import (
 
 const (
 	MaxReferralCodeLength = 256
-	IsDebugLogEnabled = false
+	IsDebugLogEnabled     = false
 )
 
 type CreateReq struct {
@@ -41,6 +41,7 @@ type Settings struct {
 	PushNewLike    bool   `json:"pushNewLike"`
 	PushNewMessage bool   `json:"pushNewMessage"`
 	PushNewMatch   bool   `json:"pushNewMatch"`
+	PushVibration  bool   `json:"pushVibration"`
 	TimeZone       int    `json:"timeZone"`
 }
 

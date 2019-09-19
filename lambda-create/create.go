@@ -212,6 +212,10 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 		return commons.NewServiceResponse(commons.WrongRequestParamsClientError), nil
 	}
 
+	if isItAndroid {
+		userSettings.PushVibration = false
+	}
+
 	ok, errStr = createUserSettingsIntoDynamo(userId, userSettings, lc)
 	if !ok {
 		anlogger.Errorf(lc, "create.go : userId [%s], customerId [%s], return %s to client", userId, customerId, errStr)
@@ -231,6 +235,7 @@ func handler(ctx context.Context, request events.ALBTargetGroupRequest) (events.
 	settingsEvent := commons.NewUserSettingsUpdatedEvent(userId, sourceIp, userSettings.Locale, true,
 		userSettings.Push, userSettings.PushNewLike, userSettings.PushNewMatch, userSettings.PushNewMessage,
 		true, true, true, true,
+		userSettings.PushVibration, true,
 		userSettings.TimeZone, true)
 	commons.SendAnalyticEvent(settingsEvent, userId, deliveryStreamName, awsDeliveryStreamClient, anlogger, lc)
 
@@ -486,6 +491,7 @@ func createUserSettingsIntoDynamo(userId string, settings *apimodel.Settings, lc
 				"#pushNewLike":    aws.String(commons.PushNewLikeColumnName),
 				"#pushNewMatch":   aws.String(commons.PushNewMatchColumnName),
 				"#pushNewMessage": aws.String(commons.PushNewMessageColumnName),
+				"#pushVibration":  aws.String(commons.PushVibrationColumnName),
 				"#timeZone":       aws.String(commons.TimeZoneColumnName),
 			},
 			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
@@ -504,6 +510,9 @@ func createUserSettingsIntoDynamo(userId string, settings *apimodel.Settings, lc
 				":pushNewMessageV": {
 					BOOL: aws.Bool(settings.PushNewMessage),
 				},
+				":pushVibrationV": {
+					BOOL: aws.Bool(settings.PushVibration),
+				},
 				":timeZoneV": {
 					N: aws.String(strconv.Itoa(settings.TimeZone)),
 				},
@@ -515,7 +524,7 @@ func createUserSettingsIntoDynamo(userId string, settings *apimodel.Settings, lc
 			},
 			ConditionExpression: aws.String(fmt.Sprintf("attribute_not_exists(%v)", commons.UserIdColumnName)),
 			TableName:           aws.String(userSettingsTable),
-			UpdateExpression:    aws.String("SET #locale = :localeV, #push = :pushV, #timeZone = :timeZoneV, #pushNewLike = :pushNewLikeV, #pushNewMatch = :pushNewMatchV, #pushNewMessage = :pushNewMessageV"),
+			UpdateExpression:    aws.String("SET #locale = :localeV, #push = :pushV, #timeZone = :timeZoneV, #pushNewLike = :pushNewLikeV, #pushNewMatch = :pushNewMatchV, #pushNewMessage = :pushNewMessageV, #pushVibration = :pushVibrationV"),
 		}
 
 	_, err := awsDbClient.UpdateItem(input)
